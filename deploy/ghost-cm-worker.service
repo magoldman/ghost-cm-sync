@@ -1,0 +1,25 @@
+[Unit]
+Description=Ghost to Campaign Monitor Sync Worker
+After=network.target redis.service ghost-cm-sync.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/ghost-cm-sync
+Environment="PATH=/opt/ghost-cm-sync/.venv/bin"
+EnvironmentFile=/opt/ghost-cm-sync/.env
+ExecStart=/opt/ghost-cm-sync/.venv/bin/rq worker ghost-cm-sync --with-scheduler
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
