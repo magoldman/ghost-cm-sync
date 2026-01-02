@@ -13,9 +13,27 @@ This guide covers deploying ghost-cm-sync to a DigitalOcean droplet running Ubun
 
 SSH into your droplet and run:
 
+### Ubuntu 24.04 LTS (Recommended)
+
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
+
+# Install required packages (Python 3.12 is included)
+sudo apt install -y python3-venv python3-dev \
+    redis-server nginx certbot python3-certbot-nginx git
+```
+
+### Ubuntu 22.04 LTS
+
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Add deadsnakes PPA for Python 3.11
+sudo apt install -y software-properties-common
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
 
 # Install required packages
 sudo apt install -y python3.11 python3.11-venv python3.11-dev \
@@ -54,8 +72,8 @@ cd /opt/ghost-cm-sync
 # Clone repository (or upload files)
 sudo git clone https://github.com/yourusername/ghost-cm-sync.git .
 
-# Create virtual environment
-sudo python3.11 -m venv .venv
+# Create virtual environment (use python3 on Ubuntu 24.04)
+sudo python3 -m venv .venv
 
 # Install dependencies
 sudo /opt/ghost-cm-sync/.venv/bin/pip install --upgrade pip

@@ -5,6 +5,9 @@ import hmac
 from typing import Any
 
 from src.config import get_settings
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def validate_signature(payload: bytes, signature: str | None) -> bool:
@@ -22,10 +25,19 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
         True if signature is valid, False otherwise
     """
     if not signature:
+        logger.warning("signature_missing")
         return False
 
     settings = get_settings()
     secret = settings.ghost_webhook_secret.encode()
+
+    # Log for debugging (remove in production)
+    logger.debug(
+        "signature_debug",
+        signature_header=signature,
+        secret_length=len(settings.ghost_webhook_secret),
+        payload_length=len(payload),
+    )
 
     # Ghost signature format: sha256=<hex_digest>, t=<timestamp>
     # We need to extract the sha256 part
@@ -33,13 +45,23 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
     expected_sig = sig_parts.get("sha256")
 
     if not expected_sig:
+        logger.warning("signature_parse_failed", signature=signature)
         return False
 
     # Compute HMAC-SHA256
     computed = hmac.new(secret, payload, hashlib.sha256).hexdigest()
 
+    is_valid = hmac.compare_digest(computed, expected_sig)
+
+    if not is_valid:
+        logger.warning(
+            "signature_mismatch",
+            expected=expected_sig[:16] + "...",
+            computed=computed[:16] + "...",
+        )
+
     # Use constant-time comparison to prevent timing attacks
-    return hmac.compare_digest(computed, expected_sig)
+    return is_valid
 
 
 def compute_signature(payload: bytes, secret: str | None = None) -> str:

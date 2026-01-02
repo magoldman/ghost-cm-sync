@@ -7,7 +7,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=/opt/ghost-cm-sync
-Environment="PATH=/opt/ghost-cm-sync/.venv/bin"
+Environment="PATH=/opt/ghost-cm-sync/.venv/bin:/usr/bin"
 EnvironmentFile=/opt/ghost-cm-sync/.env
 ExecStart=/opt/ghost-cm-sync/.venv/bin/uvicorn src.main:app --host 127.0.0.1 --port 3000
 Restart=always
