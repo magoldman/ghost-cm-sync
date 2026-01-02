@@ -264,7 +264,12 @@ def main() -> int:
         active_members = []
         disabled_members = []
         for m in members:
-            if m.get("email_disabled") or m.get("email_suppression") is not None:
+            # Check if email is disabled or suppressed
+            is_disabled = m.get("email_disabled", False)
+            suppression = m.get("email_suppression") or {}
+            is_suppressed = suppression.get("suppressed", False) if isinstance(suppression, dict) else False
+
+            if is_disabled or is_suppressed:
                 disabled_members.append(m)
             else:
                 active_members.append(m)
