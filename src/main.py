@@ -95,8 +95,16 @@ async def handle_ghost_webhook(
             detail="Unknown event type",
         )
 
-    # Extract email for logging
-    email = payload.get("member", {}).get("current", {}).get("email", "unknown")
+    # Log raw payload for debugging
+    logger.info("webhook_payload_debug", payload=payload)
+
+    # Extract email for logging - check both current and previous for deleted events
+    member_data = payload.get("member", {})
+    email = (
+        member_data.get("current", {}).get("email")
+        or member_data.get("previous", {}).get("email")
+        or "unknown"
+    )
 
     # Queue event for async processing
     try:

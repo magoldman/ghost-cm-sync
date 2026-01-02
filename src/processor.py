@@ -177,17 +177,32 @@ def process_member_deleted(payload: GhostWebhookPayload) -> SyncResult:
         SyncResult with operation details
     """
     start_time = time.time()
-    member = payload.member.current
+
+    # For deleted events, Ghost sends data in 'previous', not 'current'
+    email = (
+        payload.member.current.email
+        or (payload.member.previous.email if payload.member.previous else None)
+    )
+
+    if not email:
+        return SyncResult(
+            success=False,
+            email="unknown",
+            event_type="member.deleted",
+            message="No email found in payload",
+            latency_ms=(time.time() - start_time) * 1000,
+        )
+
     client = get_cm_client()
 
     try:
-        client.unsubscribe(member.email)
+        client.unsubscribe(email)
 
         latency_ms = (time.time() - start_time) * 1000
 
         return SyncResult(
             success=True,
-            email=member.email,
+            email=email,
             event_type="member.deleted",
             message="Subscriber unsubscribed (soft delete)",
             latency_ms=latency_ms,
@@ -197,12 +212,12 @@ def process_member_deleted(payload: GhostWebhookPayload) -> SyncResult:
         latency_ms = (time.time() - start_time) * 1000
         logger.error(
             "process_member_deleted_failed",
-            email_hash=hash_email(member.email),
+            email_hash=hash_email(email),
             error=str(e),
         )
         return SyncResult(
             success=False,
-            email=member.email,
+            email=email,
             event_type="member.deleted",
             message=str(e),
             latency_ms=latency_ms,

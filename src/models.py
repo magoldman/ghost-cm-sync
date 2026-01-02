@@ -16,22 +16,26 @@ class GhostLabel(BaseModel):
 class GhostMemberData(BaseModel):
     """Ghost member data from webhook payload."""
 
-    id: str
-    email: EmailStr
+    id: str | None = None
+    email: EmailStr | None = None
     name: str | None = None
-    status: str  # free, paid, comped
+    status: str | None = None  # free, paid, comped
     subscribed: bool = True
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     labels: list[GhostLabel] = Field(default_factory=list)
 
 
 class GhostMemberPrevious(BaseModel):
-    """Previous state of Ghost member (for update events)."""
+    """Previous state of Ghost member (for update/delete events)."""
 
+    id: str | None = None
+    email: EmailStr | None = None
+    name: str | None = None
     status: str | None = None
     subscribed: bool | None = None
-    name: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     labels: list[GhostLabel] | None = None
 
 
