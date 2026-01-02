@@ -24,20 +24,18 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
     Returns:
         True if signature is valid, False otherwise
     """
+    settings = get_settings()
+
+    # If no secret configured, skip validation (not recommended for production)
+    if not settings.ghost_webhook_secret:
+        logger.warning("signature_validation_disabled", reason="no secret configured")
+        return True
+
     if not signature:
         logger.warning("signature_missing")
         return False
 
-    settings = get_settings()
     secret = settings.ghost_webhook_secret.encode()
-
-    # Log for debugging (remove in production)
-    logger.debug(
-        "signature_debug",
-        signature_header=signature,
-        secret_length=len(settings.ghost_webhook_secret),
-        payload_length=len(payload),
-    )
 
     # Ghost signature format: sha256=<hex_digest>, t=<timestamp>
     # We need to extract the sha256 part
