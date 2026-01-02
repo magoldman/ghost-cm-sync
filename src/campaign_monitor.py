@@ -97,6 +97,20 @@ class CampaignMonitorClient:
             if response.status_code == 200:
                 self._record_success()
                 return response.json()
+            elif response.status_code == 400:
+                # Check if it's "subscriber not found" (Code 203) - this is not an error
+                try:
+                    error_data = response.json()
+                    if error_data.get("Code") == 203:
+                        self._record_success()
+                        return None
+                except Exception:
+                    pass
+                self._record_failure()
+                raise CampaignMonitorError(
+                    f"Failed to get subscriber: {response.text}",
+                    status_code=response.status_code,
+                )
             elif response.status_code == 404:
                 self._record_success()
                 return None
