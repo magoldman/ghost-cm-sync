@@ -288,48 +288,14 @@ def main() -> int:
             "failed": 0,
             "status_changes": 0,
             "unsubscribed": 0,
-            "unsubscribe_failed": 0,
+            "skipped_not_in_list": 0,
         }
 
-        # First, unsubscribe disabled members from Campaign Monitor
-        if disabled_members:
-            print()
-            print("Unsubscribing disabled members from Campaign Monitor...")
-            cm_client = get_cm_client()
+        cm_client = get_cm_client()
 
-            for i, member_dict in enumerate(disabled_members, 1):
-                email = member_dict.get("email")
-                if not email:
-                    continue
-
-                if args.dry_run:
-                    results["unsubscribed"] += 1
-                else:
-                    try:
-                        cm_client.unsubscribe(email)
-                        results["unsubscribed"] += 1
-                    except CampaignMonitorError as e:
-                        error_str = str(e).lower()
-                        # Ignore "not in list" or "already unsubscribed" errors
-                        if "203" in str(e) or "not in list" in error_str or "already" in error_str:
-                            # Not an error - just skip
-                            pass
-                        else:
-                            results["unsubscribe_failed"] += 1
-                            print(f"  Failed to unsubscribe: {email} - {e}")
-                    except CircuitBreakerOpen:
-                        print(f"  Circuit breaker open - waiting 10 seconds...")
-                        time.sleep(10)
-                        # Reset the circuit breaker manually for bulk operations
-                        cm_client._circuit_open_until = None
-                        cm_client._failure_count = 0
-
-                if i % 50 == 0:
-                    print(f"  Processed {i}/{len(disabled_members)} disabled members...")
-
-        # Then sync active members
+        # Step 1: Sync active members (add or update)
         print()
-        print("Syncing active members to Campaign Monitor...")
+        print("Step 1: Syncing active members to Campaign Monitor...")
 
         for i, member_dict in enumerate(active_members, 1):
             member = parse_ghost_member(member_dict)
@@ -347,17 +313,63 @@ def main() -> int:
             if i % 50 == 0:
                 print(f"  Processed {i}/{len(active_members)} active members...")
 
+        # Step 2: Unsubscribe disabled members (only if they exist in CM)
+        if disabled_members:
+            print()
+            print("Step 2: Processing disabled members...")
+            print(f"  Checking {len(disabled_members)} disabled members against Campaign Monitor...")
+
+            for i, member_dict in enumerate(disabled_members, 1):
+                email = member_dict.get("email")
+                if not email:
+                    continue
+
+                if args.dry_run:
+                    # In dry run, we'd check if they exist
+                    results["unsubscribed"] += 1
+                else:
+                    try:
+                        # First check if subscriber exists in CM
+                        existing = cm_client.get_subscriber(email)
+
+                        if existing is None:
+                            # Not in list, skip
+                            results["skipped_not_in_list"] += 1
+                        else:
+                            # Exists in CM, unsubscribe them
+                            cm_client.unsubscribe(email)
+                            results["unsubscribed"] += 1
+
+                    except CampaignMonitorError as e:
+                        # Log but don't count as failure for "not in list" type errors
+                        error_str = str(e).lower()
+                        if "203" in str(e) or "not in list" in error_str:
+                            results["skipped_not_in_list"] += 1
+                        else:
+                            print(f"  Error processing {email}: {e}")
+                    except CircuitBreakerOpen:
+                        print(f"  Circuit breaker open - waiting 10 seconds...")
+                        time.sleep(10)
+                        cm_client._circuit_open_until = None
+                        cm_client._failure_count = 0
+
+                if i % 50 == 0:
+                    print(f"  Processed {i}/{len(disabled_members)} disabled members...")
+
         # Summary
         print()
         print(f"{'=' * 40}")
         print("Summary:")
         print(f"  Total members in Ghost: {len(members)}")
-        print(f"  Active members synced: {results['synced']}")
-        print(f"  Active members failed: {results['failed']}")
+        print()
+        print("Active members:")
+        print(f"  Synced: {results['synced']}")
+        print(f"  Failed: {results['failed']}")
         print(f"  Status changes detected: {results['status_changes']}")
-        print(f"  Disabled members unsubscribed: {results['unsubscribed']}")
-        if results["unsubscribe_failed"] > 0:
-            print(f"  Unsubscribe failures: {results['unsubscribe_failed']}")
+        print()
+        print("Disabled members:")
+        print(f"  Unsubscribed from CM: {results['unsubscribed']}")
+        print(f"  Skipped (not in CM): {results['skipped_not_in_list']}")
 
         if args.dry_run:
             print()
