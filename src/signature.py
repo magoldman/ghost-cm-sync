@@ -38,16 +38,22 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
     secret = settings.ghost_webhook_secret.encode()
 
     # Ghost signature format: sha256=<hex_digest>, t=<timestamp>
-    # We need to extract the sha256 part
+    # Parse both parts
     sig_parts = dict(part.split("=", 1) for part in signature.split(", ") if "=" in part)
     expected_sig = sig_parts.get("sha256")
+    timestamp = sig_parts.get("t")
 
     if not expected_sig:
         logger.warning("signature_parse_failed", signature=signature)
         return False
 
-    # Compute HMAC-SHA256
-    computed = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    if not timestamp:
+        logger.warning("signature_timestamp_missing", signature=signature)
+        return False
+
+    # Ghost signs: body + timestamp (concatenated)
+    payload_to_sign = payload + timestamp.encode()
+    computed = hmac.new(secret, payload_to_sign, hashlib.sha256).hexdigest()
 
     is_valid = hmac.compare_digest(computed, expected_sig)
 
@@ -58,7 +64,6 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
             computed=computed[:16] + "...",
         )
 
-    # Use constant-time comparison to prevent timing attacks
     return is_valid
 
 
