@@ -6,7 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 import redis
-from rq import Queue
+from rq import Queue, Retry
 from rq.job import Job
 
 from src.config import get_settings
@@ -63,7 +63,7 @@ def enqueue_event(event_type: str, payload: dict[str, Any]) -> str:
         "src.worker.process_queued_event",
         event.model_dump(mode="json"),
         job_id=event.event_id,
-        retry=settings.max_retries,
+        retry=Retry(max=settings.max_retries, interval=settings.retry_delays),
     )
 
     logger.info(
