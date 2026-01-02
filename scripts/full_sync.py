@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import httpx
 import jwt
 
-from src.campaign_monitor import CampaignMonitorError, get_cm_client
+from src.campaign_monitor import CampaignMonitorError, CircuitBreakerOpen, get_cm_client
 from src.config import get_settings
 from src.logging_config import configure_logging, get_logger, hash_email
 from src.models import GhostLabel, GhostMemberData
@@ -309,10 +309,20 @@ def main() -> int:
                         cm_client.unsubscribe(email)
                         results["unsubscribed"] += 1
                     except CampaignMonitorError as e:
-                        # Ignore "not in list" errors - they're already unsubscribed or never added
-                        if "203" not in str(e) and "not in list" not in str(e).lower():
+                        error_str = str(e).lower()
+                        # Ignore "not in list" or "already unsubscribed" errors
+                        if "203" in str(e) or "not in list" in error_str or "already" in error_str:
+                            # Not an error - just skip
+                            pass
+                        else:
                             results["unsubscribe_failed"] += 1
                             print(f"  Failed to unsubscribe: {email} - {e}")
+                    except CircuitBreakerOpen:
+                        print(f"  Circuit breaker open - waiting 10 seconds...")
+                        time.sleep(10)
+                        # Reset the circuit breaker manually for bulk operations
+                        cm_client._circuit_open_until = None
+                        cm_client._failure_count = 0
 
                 if i % 50 == 0:
                     print(f"  Processed {i}/{len(disabled_members)} disabled members...")
