@@ -229,6 +229,11 @@ def main() -> int:
         default=0,
         help="Limit number of members to sync (0 = all)",
     )
+    parser.add_argument(
+        "--include-disabled",
+        action="store_true",
+        help="Include members with disabled emails (bounced/failed delivery)",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -243,6 +248,7 @@ def main() -> int:
     print(f"Ghost URL: {settings.ghost_url}")
     print(f"CM List ID: {settings.cm_list_id}")
     print(f"Dry Run: {args.dry_run}")
+    print(f"Include Disabled Emails: {args.include_disabled}")
     print()
 
     # Initialize Ghost client
@@ -252,20 +258,65 @@ def main() -> int:
         # Fetch all members
         print("Fetching members from Ghost...")
         members = ghost_client.get_members()
-        print(f"Found {len(members)} members")
+        print(f"Found {len(members)} total members")
+
+        # Separate members into active and disabled
+        active_members = []
+        disabled_members = []
+        for m in members:
+            if m.get("email_disabled") or m.get("email_suppression") is not None:
+                disabled_members.append(m)
+            else:
+                active_members.append(m)
+
+        if disabled_members:
+            print(f"Found {len(disabled_members)} members with disabled/suppressed emails")
+        print(f"Found {len(active_members)} members with valid emails")
 
         if args.limit > 0:
-            members = members[: args.limit]
-            print(f"Limited to {len(members)} members")
+            active_members = active_members[: args.limit]
+            print(f"Limited to {len(active_members)} active members")
 
-        # Sync each member
+        # Sync results
         results = {
             "synced": 0,
             "failed": 0,
             "status_changes": 0,
+            "unsubscribed": 0,
+            "unsubscribe_failed": 0,
         }
 
-        for i, member_dict in enumerate(members, 1):
+        # First, unsubscribe disabled members from Campaign Monitor
+        if disabled_members:
+            print()
+            print("Unsubscribing disabled members from Campaign Monitor...")
+            cm_client = get_cm_client()
+
+            for i, member_dict in enumerate(disabled_members, 1):
+                email = member_dict.get("email")
+                if not email:
+                    continue
+
+                if args.dry_run:
+                    results["unsubscribed"] += 1
+                else:
+                    try:
+                        cm_client.unsubscribe(email)
+                        results["unsubscribed"] += 1
+                    except CampaignMonitorError as e:
+                        # Ignore "not in list" errors - they're already unsubscribed or never added
+                        if "203" not in str(e) and "not in list" not in str(e).lower():
+                            results["unsubscribe_failed"] += 1
+                            print(f"  Failed to unsubscribe: {email} - {e}")
+
+                if i % 50 == 0:
+                    print(f"  Processed {i}/{len(disabled_members)} disabled members...")
+
+        # Then sync active members
+        print()
+        print("Syncing active members to Campaign Monitor...")
+
+        for i, member_dict in enumerate(active_members, 1):
             member = parse_ghost_member(member_dict)
             result = sync_member(member, dry_run=args.dry_run)
 
@@ -279,16 +330,19 @@ def main() -> int:
 
             # Progress indicator
             if i % 50 == 0:
-                print(f"  Processed {i}/{len(members)} members...")
+                print(f"  Processed {i}/{len(active_members)} active members...")
 
         # Summary
         print()
         print(f"{'=' * 40}")
         print("Summary:")
-        print(f"  Total members: {len(members)}")
-        print(f"  Synced: {results['synced']}")
-        print(f"  Failed: {results['failed']}")
+        print(f"  Total members in Ghost: {len(members)}")
+        print(f"  Active members synced: {results['synced']}")
+        print(f"  Active members failed: {results['failed']}")
         print(f"  Status changes detected: {results['status_changes']}")
+        print(f"  Disabled members unsubscribed: {results['unsubscribed']}")
+        if results["unsubscribe_failed"] > 0:
+            print(f"  Unsubscribe failures: {results['unsubscribe_failed']}")
 
         if args.dry_run:
             print()
