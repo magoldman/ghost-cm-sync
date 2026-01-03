@@ -185,7 +185,7 @@ class CampaignMonitorClient:
                 logger.info(
                     "subscriber_upserted",
                     email_hash=hash_email(member.email),
-                    name=member.name or "(no name)",
+                    name=member.name or "",
                     status=member.status,
                     status_changed=previous_status is not None,
                 )

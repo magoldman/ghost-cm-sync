@@ -115,3 +115,7 @@ Custom fields (configured in CM list):
 - `POST /webhook/ghost` - Ghost webhook receiver
 - `GET /health` - Health check endpoint
 - `GET /metrics` - Prometheus metrics (if enabled)
+
+
+# DEPLOY instructions
+- found in DEPLOY.md

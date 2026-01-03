@@ -315,7 +315,7 @@ def main() -> int:
                 if result.get("status_changed"):
                     results["status_changes"] += 1
                 if args.verbose:
-                    name_display = member.name or "(no name)"
+                    name_display = member.name or ""
                     print(f"  ✓ {member.email} | {name_display} | {member.status}")
             else:
                 results["failed"] += 1
