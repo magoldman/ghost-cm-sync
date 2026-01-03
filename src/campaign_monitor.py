@@ -185,10 +185,11 @@ class CampaignMonitorClient:
                 logger.info(
                     "subscriber_upserted",
                     email_hash=hash_email(member.email),
+                    name=member.name or "(no name)",
                     status=member.status,
                     status_changed=previous_status is not None,
                 )
-                return {"success": True, "email": member.email}
+                return {"success": True, "email": member.email, "name": member.name}
             else:
                 self._record_failure()
                 raise CampaignMonitorError(

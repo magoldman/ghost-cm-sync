@@ -86,6 +86,24 @@ class TestProcessEvent:
         mock_client.add_or_update_subscriber.assert_called_once()
 
     @patch("src.processor.get_cm_client")
+    def test_process_member_added_includes_name(
+        self, mock_get_client: MagicMock, sample_ghost_payload: dict[str, Any]
+    ) -> None:
+        """Test that member.added event passes name to Campaign Monitor."""
+        mock_client = MagicMock()
+        mock_client.get_subscriber.return_value = None
+        mock_client.add_or_update_subscriber.return_value = {"success": True}
+        mock_get_client.return_value = mock_client
+
+        result = process_event("member.added", sample_ghost_payload)
+
+        assert result.success is True
+        # Verify the member passed to add_or_update_subscriber has the name
+        call_args = mock_client.add_or_update_subscriber.call_args
+        member = call_args.kwargs.get("member") or call_args.args[0]
+        assert member.name == "Test User"
+
+    @patch("src.processor.get_cm_client")
     def test_process_member_updated_with_status_change(
         self, mock_get_client: MagicMock, sample_ghost_update_payload: dict[str, Any]
     ) -> None:

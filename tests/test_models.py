@@ -107,6 +107,33 @@ class TestCMSubscriberPayload:
         assert payload.Resubscribe is True
         assert payload.ConsentToTrack == "Yes"
 
+    def test_subscriber_payload_name_serialization(self) -> None:
+        """Test that Name field is properly serialized in payload."""
+        payload = CMSubscriberPayload(
+            EmailAddress="test@example.com",
+            Name="John Doe",
+            CustomFields=[],
+        )
+
+        serialized = payload.model_dump(by_alias=True)
+
+        assert "Name" in serialized
+        assert serialized["Name"] == "John Doe"
+        assert serialized["EmailAddress"] == "test@example.com"
+
+    def test_subscriber_payload_empty_name(self) -> None:
+        """Test that empty name is handled correctly."""
+        payload = CMSubscriberPayload(
+            EmailAddress="test@example.com",
+            Name="",
+            CustomFields=[],
+        )
+
+        serialized = payload.model_dump(by_alias=True)
+
+        assert "Name" in serialized
+        assert serialized["Name"] == ""
+
 
 class TestSyncResult:
     """Tests for SyncResult model."""

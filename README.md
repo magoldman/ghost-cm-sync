@@ -5,6 +5,7 @@ A webhook-based integration that synchronizes Ghost membership data to Campaign 
 ## Features
 
 - Real-time sync of Ghost member events (added, updated, deleted)
+- Syncs member name and email to Campaign Monitor
 - Status change detection with historical tracking
 - Async processing with Redis-backed queue
 - Exponential backoff retry with dead letter queue
@@ -134,6 +135,9 @@ python scripts/full_sync.py --dry-run
 
 # Execute full sync
 python scripts/full_sync.py
+
+# Execute with verbose output (shows names)
+python scripts/full_sync.py --verbose
 ```
 
 ### Replay Failed Events

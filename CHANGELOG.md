@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Improved
+
+- Enhanced name field sync visibility: Added name to subscriber upsert logging
+- Added `--verbose` flag to full_sync.py to display names during sync
+- Improved sync result output to include member names
+
+### Tests
+
+- Added tests for name field serialization in Campaign Monitor payload
+- Added test to verify name is passed through event processor
+
 ## [0.1.0] - 2026-01-02
 
 ### Added

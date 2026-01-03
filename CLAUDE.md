@@ -86,10 +86,15 @@ python scripts/replay_dlq.py --from 2026-01-01 --to 2026-01-02
 3. Event queued to Redis for async processing
 4. Worker fetches current subscriber from Campaign Monitor
 5. Detects status changes, updates ghost_previous_status and ghost_status_changed_at
-6. Upserts subscriber to Campaign Monitor with all custom fields
+6. Upserts subscriber to Campaign Monitor with name, email, and all custom fields
 
-## Custom Fields in Campaign Monitor
+## Fields Synced to Campaign Monitor
 
+Standard fields (built-in CM fields):
+- `EmailAddress` - Member email address
+- `Name` - Member name from Ghost
+
+Custom fields (configured in CM list):
 - `ghost_status` - Member tier: free, paid, comped
 - `ghost_signup_date` - Original Ghost signup date
 - `ghost_last_updated` - Last Ghost modification timestamp

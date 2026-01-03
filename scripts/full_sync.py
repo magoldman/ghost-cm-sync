@@ -167,6 +167,7 @@ def sync_member(member: GhostMemberData, dry_run: bool = False) -> dict:
     if dry_run:
         return {
             "email": member.email,
+            "name": member.name,
             "status": member.status,
             "action": "would_sync",
             "dry_run": True,
@@ -198,6 +199,7 @@ def sync_member(member: GhostMemberData, dry_run: bool = False) -> dict:
 
         return {
             "email": member.email,
+            "name": member.name,
             "status": member.status,
             "action": "synced",
             "status_changed": status_changed,
@@ -207,6 +209,7 @@ def sync_member(member: GhostMemberData, dry_run: bool = False) -> dict:
     except CampaignMonitorError as e:
         return {
             "email": member.email,
+            "name": member.name,
             "status": member.status,
             "action": "failed",
             "error": str(e),
@@ -234,6 +237,11 @@ def main() -> int:
         action="store_true",
         help="Include members with disabled emails (bounced/failed delivery)",
     )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Show detailed output including names being synced",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -249,6 +257,7 @@ def main() -> int:
     print(f"CM List ID: {settings.cm_list_id}")
     print(f"Dry Run: {args.dry_run}")
     print(f"Include Disabled Emails: {args.include_disabled}")
+    print(f"Verbose: {args.verbose}")
     print()
 
     # Initialize Ghost client
@@ -305,12 +314,15 @@ def main() -> int:
                 results["synced"] += 1
                 if result.get("status_changed"):
                     results["status_changes"] += 1
+                if args.verbose:
+                    name_display = member.name or "(no name)"
+                    print(f"  ✓ {member.email} | {name_display} | {member.status}")
             else:
                 results["failed"] += 1
-                print(f"  Failed: {member.email} - {result.get('error')}")
+                print(f"  ✗ Failed: {member.email} - {result.get('error')}")
 
             # Progress indicator
-            if i % 50 == 0:
+            if i % 50 == 0 and not args.verbose:
                 print(f"  Processed {i}/{len(active_members)} active members...")
 
         # Step 2: Unsubscribe disabled members (only if they exist in CM)
