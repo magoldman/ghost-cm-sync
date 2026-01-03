@@ -239,6 +239,25 @@ class CampaignMonitorClient:
                     email_hash=hash_email(email),
                 )
                 return {"success": True, "email": email}
+            elif response.status_code == 400:
+                # Check if it's "subscriber not in list" (Code 203) - treat as success
+                try:
+                    error_data = response.json()
+                    if error_data.get("Code") == 203:
+                        self._record_success()
+                        logger.info(
+                            "subscriber_already_removed",
+                            site_id=self.site_id,
+                            email_hash=hash_email(email),
+                        )
+                        return {"success": True, "email": email, "already_removed": True}
+                except Exception:
+                    pass
+                self._record_failure()
+                raise CampaignMonitorError(
+                    f"Failed to unsubscribe: {response.text}",
+                    status_code=response.status_code,
+                )
             else:
                 self._record_failure()
                 raise CampaignMonitorError(
