@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # Ignore SITE*_ variables (loaded separately)
     )
 
     # Campaign Monitor Configuration (shared across sites)
