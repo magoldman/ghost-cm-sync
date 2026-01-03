@@ -2,17 +2,16 @@
 """
 Full sync script for Ghost → Campaign Monitor.
 
-Pulls all Ghost members and syncs them to Campaign Monitor.
+Pulls all Ghost members from a specific site and syncs them to Campaign Monitor.
 Used for initial migration and recovery from data drift.
 
 Usage:
-    python scripts/full_sync.py --dry-run  # Preview changes
-    python scripts/full_sync.py            # Execute sync
+    python scripts/full_sync.py --site mainblog --dry-run  # Preview changes
+    python scripts/full_sync.py --site mainblog            # Execute sync
+    python scripts/full_sync.py --list-sites               # List configured sites
 """
 
 import argparse
-import hashlib
-import hmac
 import sys
 import time
 from datetime import datetime, timezone
@@ -24,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import httpx
 import jwt
 
-from src.campaign_monitor import CampaignMonitorError, CircuitBreakerOpen, get_cm_client
-from src.config import get_settings
+from src.campaign_monitor import CampaignMonitorClient, CampaignMonitorError, CircuitBreakerOpen
+from src.config import get_settings, get_site_config, get_site_ids
 from src.logging_config import configure_logging, get_logger, hash_email
 from src.models import GhostLabel, GhostMemberData
 
@@ -151,19 +150,22 @@ def parse_ghost_member(member_dict: dict) -> GhostMemberData:
     )
 
 
-def sync_member(member: GhostMemberData, dry_run: bool = False) -> dict:
+def sync_member(
+    member: GhostMemberData,
+    cm_client: CampaignMonitorClient,
+    dry_run: bool = False,
+) -> dict:
     """
     Sync a single member to Campaign Monitor.
 
     Args:
         member: Ghost member data
+        cm_client: Campaign Monitor client for the site
         dry_run: If True, don't actually sync
 
     Returns:
         Sync result dictionary
     """
-    cm_client = get_cm_client()
-
     if dry_run:
         return {
             "email": member.email,
@@ -216,10 +218,48 @@ def sync_member(member: GhostMemberData, dry_run: bool = False) -> dict:
         }
 
 
+def list_sites() -> int:
+    """List all configured sites."""
+    site_ids = get_site_ids()
+
+    if not site_ids:
+        print("No sites configured.")
+        print()
+        print("Configure sites using environment variables:")
+        print("  SITE1_NAME=mainblog")
+        print("  SITE1_GHOST_WEBHOOK_SECRET=...")
+        print("  SITE1_GHOST_URL=https://blog.example.com")
+        print("  SITE1_GHOST_ADMIN_API_KEY=...")
+        print("  SITE1_CM_LIST_ID=...")
+        return 1
+
+    print("Configured sites:")
+    print()
+    for site_id in site_ids:
+        config = get_site_config(site_id)
+        if config:
+            print(f"  {site_id}")
+            print(f"    Ghost URL: {config.ghost_url or '(not configured)'}")
+            print(f"    CM List ID: {config.cm_list_id}")
+            print()
+
+    return 0
+
+
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Sync all Ghost members to Campaign Monitor"
+        description="Sync Ghost members to Campaign Monitor for a specific site"
+    )
+    parser.add_argument(
+        "--site",
+        type=str,
+        help="Site identifier to sync (required unless --list-sites)",
+    )
+    parser.add_argument(
+        "--list-sites",
+        action="store_true",
+        help="List all configured sites",
     )
     parser.add_argument(
         "--dry-run",
@@ -244,24 +284,48 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    settings = get_settings()
+    # Handle --list-sites
+    if args.list_sites:
+        return list_sites()
 
-    if not settings.ghost_url or not settings.ghost_admin_api_key:
-        logger.error("missing_ghost_config", message="GHOST_URL and GHOST_ADMIN_API_KEY required")
-        print("Error: GHOST_URL and GHOST_ADMIN_API_KEY environment variables are required")
+    # Require --site for sync operations
+    if not args.site:
+        print("Error: --site is required for sync operations")
+        print("Use --list-sites to see configured sites")
+        return 1
+
+    # Get site configuration
+    site_config = get_site_config(args.site)
+    if site_config is None:
+        print(f"Error: Unknown site '{args.site}'")
+        print("Use --list-sites to see configured sites")
+        return 1
+
+    if not site_config.ghost_url or not site_config.ghost_admin_api_key:
+        logger.error(
+            "missing_ghost_config",
+            site_id=args.site,
+            message="GHOST_URL and GHOST_ADMIN_API_KEY required for site",
+        )
+        print(f"Error: Ghost credentials not configured for site '{args.site}'")
+        print("Set SITE{N}_GHOST_URL and SITE{N}_GHOST_ADMIN_API_KEY environment variables")
         return 1
 
     print(f"Ghost → Campaign Monitor Full Sync")
     print(f"{'=' * 40}")
-    print(f"Ghost URL: {settings.ghost_url}")
-    print(f"CM List ID: {settings.cm_list_id}")
+    print(f"Site: {args.site}")
+    print(f"Ghost URL: {site_config.ghost_url}")
+    print(f"CM List ID: {site_config.cm_list_id}")
     print(f"Dry Run: {args.dry_run}")
     print(f"Include Disabled Emails: {args.include_disabled}")
     print(f"Verbose: {args.verbose}")
     print()
 
-    # Initialize Ghost client
-    ghost_client = GhostAPIClient(settings.ghost_url, settings.ghost_admin_api_key)
+    # Initialize Ghost client with site-specific credentials
+    ghost_client = GhostAPIClient(site_config.ghost_url, site_config.ghost_admin_api_key)
+
+    # Initialize CM client for this site
+    cm_client = CampaignMonitorClient(list_id=site_config.cm_list_id, site_id=args.site)
 
     try:
         # Fetch all members
@@ -300,15 +364,13 @@ def main() -> int:
             "skipped_not_in_list": 0,
         }
 
-        cm_client = get_cm_client()
-
         # Step 1: Sync active members (add or update)
         print()
         print("Step 1: Syncing active members to Campaign Monitor...")
 
         for i, member_dict in enumerate(active_members, 1):
             member = parse_ghost_member(member_dict)
-            result = sync_member(member, dry_run=args.dry_run)
+            result = sync_member(member, cm_client, dry_run=args.dry_run)
 
             if result["action"] == "synced" or result["action"] == "would_sync":
                 results["synced"] += 1
@@ -371,7 +433,7 @@ def main() -> int:
         # Summary
         print()
         print(f"{'=' * 40}")
-        print("Summary:")
+        print(f"Summary for site: {args.site}")
         print(f"  Total members in Ghost: {len(members)}")
         print()
         print("Active members:")
@@ -391,6 +453,7 @@ def main() -> int:
 
     finally:
         ghost_client.close()
+        cm_client.close()
 
 
 if __name__ == "__main__":

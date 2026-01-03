@@ -35,13 +35,14 @@ def get_failed_queue() -> Queue:
     return Queue("ghost-cm-sync-dlq", connection=conn)
 
 
-def enqueue_event(event_type: str, payload: dict[str, Any]) -> str:
+def enqueue_event(event_type: str, payload: dict[str, Any], site_id: str) -> str:
     """
     Enqueue a Ghost webhook event for async processing.
 
     Args:
         event_type: Type of event (member.added, member.updated, member.deleted)
         payload: Ghost webhook payload
+        site_id: The site identifier this event is from
 
     Returns:
         Job ID
@@ -52,6 +53,7 @@ def enqueue_event(event_type: str, payload: dict[str, Any]) -> str:
     event = QueuedEvent(
         event_id=str(uuid4()),
         event_type=event_type,
+        site_id=site_id,
         payload=payload,
         received_at=datetime.now(timezone.utc),
     )
@@ -68,6 +70,7 @@ def enqueue_event(event_type: str, payload: dict[str, Any]) -> str:
 
     logger.info(
         "event_enqueued",
+        site_id=site_id,
         event_id=event.event_id,
         event_type=event_type,
         email_hash=hash_email(email),

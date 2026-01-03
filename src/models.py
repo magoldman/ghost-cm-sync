@@ -80,6 +80,7 @@ class QueuedEvent(BaseModel):
 
     event_id: str
     event_type: str  # member.added, member.updated, member.deleted
+    site_id: str  # Which Ghost site this event is from
     payload: dict[str, Any]
     received_at: datetime
     retry_count: int = 0

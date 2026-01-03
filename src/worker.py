@@ -35,6 +35,7 @@ def process_queued_event(event_data: dict[str, Any]) -> dict[str, Any]:
 
     logger.info(
         "processing_event",
+        site_id=event.site_id,
         event_id=event.event_id,
         event_type=event.event_type,
         email_hash=hash_email(email),
@@ -42,11 +43,12 @@ def process_queued_event(event_data: dict[str, Any]) -> dict[str, Any]:
     )
 
     try:
-        result = process_event(event.event_type, event.payload)
+        result = process_event(event.event_type, event.payload, event.site_id)
 
         if result.success:
             logger.info(
                 "event_processed_successfully",
+                site_id=event.site_id,
                 event_id=event.event_id,
                 event_type=event.event_type,
                 email_hash=hash_email(email),
@@ -60,6 +62,7 @@ def process_queued_event(event_data: dict[str, Any]) -> dict[str, Any]:
                 delay = settings.retry_delays[min(event.retry_count, len(settings.retry_delays) - 1)]
                 logger.warning(
                     "event_processing_failed_will_retry",
+                    site_id=event.site_id,
                     event_id=event.event_id,
                     event_type=event.event_type,
                     email_hash=hash_email(email),
@@ -76,6 +79,7 @@ def process_queued_event(event_data: dict[str, Any]) -> dict[str, Any]:
                     move_to_dlq(job, result.message)
                 logger.error(
                     "event_processing_failed_max_retries",
+                    site_id=event.site_id,
                     event_id=event.event_id,
                     event_type=event.event_type,
                     email_hash=hash_email(email),
@@ -87,6 +91,7 @@ def process_queued_event(event_data: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         logger.error(
             "event_processing_exception",
+            site_id=event.site_id,
             event_id=event.event_id,
             event_type=event.event_type,
             email_hash=hash_email(email),

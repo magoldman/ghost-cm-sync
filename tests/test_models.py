@@ -7,9 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 # Set environment before importing
-os.environ["GHOST_WEBHOOK_SECRET"] = "test-secret-key"
 os.environ["CM_API_KEY"] = "test-cm-api-key"
-os.environ["CM_LIST_ID"] = "test-list-id"
+os.environ["SITE1_NAME"] = "testsite"
+os.environ["SITE1_GHOST_WEBHOOK_SECRET"] = "test-secret-key"
+os.environ["SITE1_CM_LIST_ID"] = "test-list-id"
 
 from src.models import (
     CMCustomField,
@@ -133,6 +134,40 @@ class TestCMSubscriberPayload:
 
         assert "Name" in serialized
         assert serialized["Name"] == ""
+
+
+class TestQueuedEvent:
+    """Tests for QueuedEvent model."""
+
+    def test_queued_event_with_site_id(self) -> None:
+        """Test QueuedEvent includes site_id."""
+        event = QueuedEvent(
+            event_id="event-123",
+            event_type="member.added",
+            site_id="testsite",
+            payload={"member": {"current": {"email": "test@example.com"}}},
+            received_at=datetime(2026, 1, 3, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+        assert event.site_id == "testsite"
+        assert event.event_type == "member.added"
+        assert event.retry_count == 0
+
+    def test_queued_event_serialization(self) -> None:
+        """Test QueuedEvent serializes correctly for Redis."""
+        event = QueuedEvent(
+            event_id="event-123",
+            event_type="member.updated",
+            site_id="mainblog",
+            payload={"member": {"current": {"email": "test@example.com"}}},
+            received_at=datetime(2026, 1, 3, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+        serialized = event.model_dump(mode="json")
+
+        assert serialized["site_id"] == "mainblog"
+        assert "event_id" in serialized
+        assert "payload" in serialized
 
 
 class TestSyncResult:

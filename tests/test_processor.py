@@ -1,16 +1,16 @@
 """Tests for event processor."""
 
 import os
-from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Set environment before importing
-os.environ["GHOST_WEBHOOK_SECRET"] = "test-secret-key"
 os.environ["CM_API_KEY"] = "test-cm-api-key"
-os.environ["CM_LIST_ID"] = "test-list-id"
+os.environ["SITE1_NAME"] = "testsite"
+os.environ["SITE1_GHOST_WEBHOOK_SECRET"] = "test-secret-key"
+os.environ["SITE1_CM_LIST_ID"] = "test-list-id"
 
 from src.processor import detect_status_change, process_event
 
@@ -78,12 +78,13 @@ class TestProcessEvent:
         mock_client.add_or_update_subscriber.return_value = {"success": True}
         mock_get_client.return_value = mock_client
 
-        result = process_event("member.added", sample_ghost_payload)
+        result = process_event("member.added", sample_ghost_payload, "testsite")
 
         assert result.success is True
         assert result.event_type == "member.added"
         assert result.email == "test@example.com"
         mock_client.add_or_update_subscriber.assert_called_once()
+        mock_get_client.assert_called_with("testsite")
 
     @patch("src.processor.get_cm_client")
     def test_process_member_added_includes_name(
@@ -95,7 +96,7 @@ class TestProcessEvent:
         mock_client.add_or_update_subscriber.return_value = {"success": True}
         mock_get_client.return_value = mock_client
 
-        result = process_event("member.added", sample_ghost_payload)
+        result = process_event("member.added", sample_ghost_payload, "testsite")
 
         assert result.success is True
         # Verify the member passed to add_or_update_subscriber has the name
@@ -115,12 +116,13 @@ class TestProcessEvent:
         mock_client.add_or_update_subscriber.return_value = {"success": True}
         mock_get_client.return_value = mock_client
 
-        result = process_event("member.updated", sample_ghost_update_payload)
+        result = process_event("member.updated", sample_ghost_update_payload, "testsite")
 
         assert result.success is True
         assert result.status_changed is True
         assert result.previous_status == "free"
         assert result.new_status == "paid"
+        mock_get_client.assert_called_with("testsite")
 
     @patch("src.processor.get_cm_client")
     def test_process_member_deleted(
@@ -131,15 +133,16 @@ class TestProcessEvent:
         mock_client.unsubscribe.return_value = {"success": True}
         mock_get_client.return_value = mock_client
 
-        result = process_event("member.deleted", sample_ghost_payload)
+        result = process_event("member.deleted", sample_ghost_payload, "testsite")
 
         assert result.success is True
         assert result.event_type == "member.deleted"
         mock_client.unsubscribe.assert_called_once_with("test@example.com")
+        mock_get_client.assert_called_with("testsite")
 
     def test_process_unknown_event_type(self, sample_ghost_payload: dict[str, Any]) -> None:
         """Test processing unknown event type."""
-        result = process_event("member.unknown", sample_ghost_payload)
+        result = process_event("member.unknown", sample_ghost_payload, "testsite")
 
         assert result.success is False
         assert "Unknown event type" in result.message

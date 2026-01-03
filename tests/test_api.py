@@ -9,15 +9,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Set environment before importing
-os.environ["GHOST_WEBHOOK_SECRET"] = "test-secret-key"
 os.environ["CM_API_KEY"] = "test-cm-api-key"
-os.environ["CM_LIST_ID"] = "test-list-id"
+os.environ["SITE1_NAME"] = "testsite"
+os.environ["SITE1_GHOST_WEBHOOK_SECRET"] = "test-secret-key"
+os.environ["SITE1_CM_LIST_ID"] = "test-list-id"
 
 from src.signature import compute_signature
 
 
 class TestWebhookEndpoint:
-    """Tests for /webhook/ghost endpoint."""
+    """Tests for /webhook/ghost/{site_id} endpoint."""
 
     def test_valid_webhook(
         self,
@@ -29,7 +30,7 @@ class TestWebhookEndpoint:
         signature = compute_signature(payload_bytes, "test-secret-key")
 
         response = client.post(
-            "/webhook/ghost",
+            "/webhook/ghost/testsite",
             content=payload_bytes,
             headers={
                 "Content-Type": "application/json",
@@ -40,7 +41,28 @@ class TestWebhookEndpoint:
         assert response.status_code == 202
         data = response.json()
         assert data["status"] == "accepted"
+        assert data["site_id"] == "testsite"
         assert "job_id" in data
+
+    def test_unknown_site(
+        self,
+        client: TestClient,
+        sample_ghost_payload: dict[str, Any],
+    ) -> None:
+        """Test webhook for unknown site returns 404."""
+        payload_bytes = json.dumps(sample_ghost_payload).encode()
+        signature = compute_signature(payload_bytes, "test-secret-key")
+
+        response = client.post(
+            "/webhook/ghost/unknownsite",
+            content=payload_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "X-Ghost-Signature": signature,
+            },
+        )
+
+        assert response.status_code == 404
 
     def test_missing_signature(
         self,
@@ -49,7 +71,7 @@ class TestWebhookEndpoint:
     ) -> None:
         """Test webhook without signature header."""
         response = client.post(
-            "/webhook/ghost",
+            "/webhook/ghost/testsite",
             json=sample_ghost_payload,
         )
 
@@ -62,7 +84,7 @@ class TestWebhookEndpoint:
     ) -> None:
         """Test webhook with invalid signature."""
         response = client.post(
-            "/webhook/ghost",
+            "/webhook/ghost/testsite",
             json=sample_ghost_payload,
             headers={"X-Ghost-Signature": "sha256=invalid, t=12345"},
         )
@@ -75,7 +97,7 @@ class TestWebhookEndpoint:
         signature = compute_signature(payload, "test-secret-key")
 
         response = client.post(
-            "/webhook/ghost",
+            "/webhook/ghost/testsite",
             content=payload,
             headers={
                 "Content-Type": "application/json",
@@ -98,6 +120,7 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
         assert "timestamp" in data
         assert "checks" in data
+        assert "configured_sites" in data
 
     @patch("src.main.get_redis_connection")
     def test_health_check_redis_down(
@@ -129,3 +152,4 @@ class TestMetricsEndpoint:
         assert "queue_depth" in data
         assert "uptime_seconds" in data
         assert "success_rate" in data
+        assert "configured_sites" in data

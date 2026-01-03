@@ -5,9 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.campaign_monitor import CampaignMonitorError, CircuitBreakerOpen, get_cm_client
-from src.config import get_settings
 from src.logging_config import get_logger, hash_email
-from src.models import GhostMemberData, GhostWebhookPayload, SyncResult
+from src.models import GhostWebhookPayload, SyncResult
 
 logger = get_logger(__name__)
 
@@ -43,19 +42,20 @@ def detect_status_change(
     return previous_status != current_status, previous_status
 
 
-def process_member_added(payload: GhostWebhookPayload) -> SyncResult:
+def process_member_added(payload: GhostWebhookPayload, site_id: str) -> SyncResult:
     """
     Process member.added event.
 
     Args:
         payload: Validated Ghost webhook payload
+        site_id: The site identifier
 
     Returns:
         SyncResult with operation details
     """
     start_time = time.time()
     member = payload.member.current
-    client = get_cm_client()
+    client = get_cm_client(site_id)
 
     try:
         # Check if subscriber already exists (for resubscription case)
@@ -87,6 +87,7 @@ def process_member_added(payload: GhostWebhookPayload) -> SyncResult:
         latency_ms = (time.time() - start_time) * 1000
         logger.error(
             "process_member_added_failed",
+            site_id=site_id,
             email_hash=hash_email(member.email),
             error=str(e),
         )
@@ -99,19 +100,20 @@ def process_member_added(payload: GhostWebhookPayload) -> SyncResult:
         )
 
 
-def process_member_updated(payload: GhostWebhookPayload) -> SyncResult:
+def process_member_updated(payload: GhostWebhookPayload, site_id: str) -> SyncResult:
     """
     Process member.updated event.
 
     Args:
         payload: Validated Ghost webhook payload
+        site_id: The site identifier
 
     Returns:
         SyncResult with operation details
     """
     start_time = time.time()
     member = payload.member.current
-    client = get_cm_client()
+    client = get_cm_client(site_id)
 
     try:
         # Get current subscriber to detect status changes
@@ -124,6 +126,7 @@ def process_member_updated(payload: GhostWebhookPayload) -> SyncResult:
         if status_changed:
             logger.info(
                 "status_change_detected",
+                site_id=site_id,
                 email_hash=hash_email(member.email),
                 previous_status=previous_status,
                 new_status=member.status,
@@ -152,6 +155,7 @@ def process_member_updated(payload: GhostWebhookPayload) -> SyncResult:
         latency_ms = (time.time() - start_time) * 1000
         logger.error(
             "process_member_updated_failed",
+            site_id=site_id,
             email_hash=hash_email(member.email),
             error=str(e),
         )
@@ -164,7 +168,7 @@ def process_member_updated(payload: GhostWebhookPayload) -> SyncResult:
         )
 
 
-def process_member_deleted(payload: GhostWebhookPayload) -> SyncResult:
+def process_member_deleted(payload: GhostWebhookPayload, site_id: str) -> SyncResult:
     """
     Process member.deleted event.
 
@@ -172,6 +176,7 @@ def process_member_deleted(payload: GhostWebhookPayload) -> SyncResult:
 
     Args:
         payload: Validated Ghost webhook payload
+        site_id: The site identifier
 
     Returns:
         SyncResult with operation details
@@ -193,7 +198,7 @@ def process_member_deleted(payload: GhostWebhookPayload) -> SyncResult:
             latency_ms=(time.time() - start_time) * 1000,
         )
 
-    client = get_cm_client()
+    client = get_cm_client(site_id)
 
     try:
         client.unsubscribe(email)
@@ -212,6 +217,7 @@ def process_member_deleted(payload: GhostWebhookPayload) -> SyncResult:
         latency_ms = (time.time() - start_time) * 1000
         logger.error(
             "process_member_deleted_failed",
+            site_id=site_id,
             email_hash=hash_email(email),
             error=str(e),
         )
@@ -224,13 +230,14 @@ def process_member_deleted(payload: GhostWebhookPayload) -> SyncResult:
         )
 
 
-def process_event(event_type: str, payload_dict: dict[str, Any]) -> SyncResult:
+def process_event(event_type: str, payload_dict: dict[str, Any], site_id: str) -> SyncResult:
     """
     Process a Ghost webhook event.
 
     Args:
         event_type: Type of event (member.added, member.updated, member.deleted)
         payload_dict: Raw payload dictionary
+        site_id: The site identifier
 
     Returns:
         SyncResult with operation details
@@ -254,4 +261,4 @@ def process_event(event_type: str, payload_dict: dict[str, Any]) -> SyncResult:
             latency_ms=0,
         )
 
-    return processor(payload)
+    return processor(payload, site_id)

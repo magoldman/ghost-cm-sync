@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from src.config import get_settings
+from src.config import get_settings, get_site_config
 from src.logging_config import get_logger, hash_email
 from src.models import CMCustomField, CMSubscriberPayload, CMUnsubscribePayload, GhostMemberData
 
@@ -31,8 +31,17 @@ class CampaignMonitorError(Exception):
 class CampaignMonitorClient:
     """Campaign Monitor API client with connection pooling and circuit breaker."""
 
-    def __init__(self) -> None:
+    def __init__(self, list_id: str, site_id: str | None = None) -> None:
+        """
+        Initialize Campaign Monitor client.
+
+        Args:
+            list_id: The Campaign Monitor list ID to use
+            site_id: Optional site identifier for logging
+        """
         self.settings = get_settings()
+        self.list_id = list_id
+        self.site_id = site_id
         self._client: httpx.Client | None = None
         self._failure_count = 0
         self._circuit_open_until: float | None = None
@@ -59,7 +68,7 @@ class CampaignMonitorClient:
             # Reset circuit breaker
             self._circuit_open_until = None
             self._failure_count = 0
-            logger.info("circuit_breaker_reset")
+            logger.info("circuit_breaker_reset", site_id=self.site_id)
 
     def _record_success(self) -> None:
         """Record successful API call."""
@@ -72,6 +81,7 @@ class CampaignMonitorClient:
             self._circuit_open_until = time.time() + self.settings.circuit_breaker_timeout
             logger.warning(
                 "circuit_breaker_opened",
+                site_id=self.site_id,
                 failure_count=self._failure_count,
                 timeout_seconds=self.settings.circuit_breaker_timeout,
             )
@@ -90,7 +100,7 @@ class CampaignMonitorClient:
 
         try:
             response = self.client.get(
-                f"/subscribers/{self.settings.cm_list_id}.json",
+                f"/subscribers/{self.list_id}.json",
                 params={"email": email},
             )
 
@@ -176,7 +186,7 @@ class CampaignMonitorClient:
 
         try:
             response = self.client.post(
-                f"/subscribers/{self.settings.cm_list_id}.json",
+                f"/subscribers/{self.list_id}.json",
                 json=payload.model_dump(by_alias=True),
             )
 
@@ -184,6 +194,7 @@ class CampaignMonitorClient:
                 self._record_success()
                 logger.info(
                     "subscriber_upserted",
+                    site_id=self.site_id,
                     email_hash=hash_email(member.email),
                     name=member.name or "",
                     status=member.status,
@@ -216,13 +227,17 @@ class CampaignMonitorClient:
 
         try:
             response = self.client.post(
-                f"/subscribers/{self.settings.cm_list_id}/unsubscribe.json",
+                f"/subscribers/{self.list_id}/unsubscribe.json",
                 json=payload.model_dump(by_alias=True),
             )
 
             if response.status_code in (200, 201):
                 self._record_success()
-                logger.info("subscriber_unsubscribed", email_hash=hash_email(email))
+                logger.info(
+                    "subscriber_unsubscribed",
+                    site_id=self.site_id,
+                    email_hash=hash_email(email),
+                )
                 return {"success": True, "email": email}
             else:
                 self._record_failure()
@@ -241,13 +256,33 @@ class CampaignMonitorClient:
             self._client = None
 
 
-# Global client instance
-_client: CampaignMonitorClient | None = None
+# Per-site client cache
+_clients: dict[str, CampaignMonitorClient] = {}
 
 
-def get_cm_client() -> CampaignMonitorClient:
-    """Get or create global Campaign Monitor client."""
-    global _client
-    if _client is None:
-        _client = CampaignMonitorClient()
-    return _client
+def get_cm_client(site_id: str) -> CampaignMonitorClient:
+    """
+    Get or create Campaign Monitor client for a specific site.
+
+    Args:
+        site_id: The site identifier
+
+    Returns:
+        CampaignMonitorClient configured for the site
+
+    Raises:
+        ValueError: If site_id is not configured
+    """
+    global _clients
+
+    if site_id not in _clients:
+        site_config = get_site_config(site_id)
+        if site_config is None:
+            raise ValueError(f"Unknown site: {site_id}")
+
+        _clients[site_id] = CampaignMonitorClient(
+            list_id=site_config.cm_list_id,
+            site_id=site_id,
+        )
+
+    return _clients[site_id]

@@ -4,6 +4,7 @@ A webhook-based integration that synchronizes Ghost membership data to Campaign 
 
 ## Features
 
+- **Multi-site support**: Sync multiple Ghost instances to separate Campaign Monitor lists
 - Real-time sync of Ghost member events (added, updated, deleted)
 - Syncs member name and email to Campaign Monitor
 - Status change detection with historical tracking
@@ -50,14 +51,37 @@ cp .env.example .env
 
 Required environment variables:
 
+**Shared Configuration:**
+
 | Variable | Description |
 |----------|-------------|
-| `GHOST_WEBHOOK_SECRET` | Shared secret for webhook signature validation |
 | `CM_API_KEY` | Campaign Monitor API key |
-| `CM_LIST_ID` | Target Campaign Monitor list ID |
 | `REDIS_URL` | Redis connection URL (default: `redis://localhost:6379`) |
 | `LOG_LEVEL` | Logging level (default: `info`) |
 | `PORT` | Server port (default: `3000`) |
+
+**Per-Site Configuration** (replace N with 1, 2, 3, etc.):
+
+| Variable | Description |
+|----------|-------------|
+| `SITEN_NAME` | Site identifier (used in webhook URLs) |
+| `SITEN_GHOST_WEBHOOK_SECRET` | Webhook secret for this Ghost site |
+| `SITEN_GHOST_URL` | Ghost site URL (for full sync) |
+| `SITEN_GHOST_ADMIN_API_KEY` | Ghost Admin API key (for full sync) |
+| `SITEN_CM_LIST_ID` | Campaign Monitor list ID for this site |
+
+Example `.env` for two sites:
+```env
+CM_API_KEY=your-cm-api-key
+
+SITE1_NAME=mainblog
+SITE1_GHOST_WEBHOOK_SECRET=secret1
+SITE1_CM_LIST_ID=list-id-1
+
+SITE2_NAME=newsletter
+SITE2_GHOST_WEBHOOK_SECRET=secret2
+SITE2_CM_LIST_ID=list-id-2
+```
 
 ### 4. Configure Campaign Monitor
 
@@ -75,13 +99,18 @@ Create the following custom fields in your Campaign Monitor list:
 
 ### 5. Configure Ghost Webhooks
 
+For **each Ghost site**:
+
 1. Go to Ghost Admin → Settings → Integrations
 2. Create a new Custom Integration named "Campaign Monitor Sync"
-3. Add webhooks for:
-   - `member.added` → `https://your-domain.com/webhook/ghost`
-   - `member.updated` → `https://your-domain.com/webhook/ghost`
-   - `member.deleted` → `https://your-domain.com/webhook/ghost`
-4. Copy the webhook secret to your `.env` file
+3. Add webhooks using your site name in the URL:
+   - `member.added` → `https://your-domain.com/webhook/ghost/{site_name}?event=member.added`
+   - `member.updated` → `https://your-domain.com/webhook/ghost/{site_name}?event=member.updated`
+   - `member.deleted` → `https://your-domain.com/webhook/ghost/{site_name}?event=member.deleted`
+4. Copy the webhook secret to your `.env` file as `SITEN_GHOST_WEBHOOK_SECRET`
+
+Example for site "mainblog":
+- `https://sync.example.com/webhook/ghost/mainblog?event=member.added`
 
 ## Running the Service
 
@@ -130,14 +159,17 @@ curl http://localhost:3000/health
 For initial migration or recovery from data drift:
 
 ```bash
-# Preview changes without applying
-python scripts/full_sync.py --dry-run
+# List configured sites
+python scripts/full_sync.py --list-sites
 
-# Execute full sync
-python scripts/full_sync.py
+# Preview changes without applying
+python scripts/full_sync.py --site mainblog --dry-run
+
+# Execute full sync for a site
+python scripts/full_sync.py --site mainblog
 
 # Execute with verbose output (shows names)
-python scripts/full_sync.py --verbose
+python scripts/full_sync.py --site mainblog --verbose
 ```
 
 ### Replay Failed Events
@@ -161,8 +193,8 @@ rq info --only-workers
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/webhook/ghost` | POST | Ghost webhook receiver |
-| `/health` | GET | Health check |
+| `/webhook/ghost/{site_id}` | POST | Ghost webhook receiver (per-site) |
+| `/health` | GET | Health check (shows configured sites) |
 | `/metrics` | GET | Prometheus metrics |
 
 ## Nginx Configuration

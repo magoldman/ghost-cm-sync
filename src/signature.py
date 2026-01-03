@@ -2,15 +2,13 @@
 
 import hashlib
 import hmac
-from typing import Any
 
-from src.config import get_settings
 from src.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def validate_signature(payload: bytes, signature: str | None) -> bool:
+def validate_signature(payload: bytes, signature: str | None, secret: str) -> bool:
     """
     Validate Ghost webhook signature.
 
@@ -20,14 +18,13 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
     Args:
         payload: Raw request body bytes
         signature: Signature from X-Ghost-Signature header
+        secret: The webhook secret for this site
 
     Returns:
         True if signature is valid, False otherwise
     """
-    settings = get_settings()
-
     # If no secret configured, skip validation (not recommended for production)
-    if not settings.ghost_webhook_secret:
+    if not secret:
         logger.warning("signature_validation_disabled", reason="no secret configured")
         return True
 
@@ -35,7 +32,7 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
         logger.warning("signature_missing")
         return False
 
-    secret = settings.ghost_webhook_secret.encode()
+    secret_bytes = secret.encode()
 
     # Ghost signature format: sha256=<hex_digest>, t=<timestamp>
     # Parse both parts
@@ -53,7 +50,7 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
 
     # Ghost signs: body + timestamp (concatenated)
     payload_to_sign = payload + timestamp.encode()
-    computed = hmac.new(secret, payload_to_sign, hashlib.sha256).hexdigest()
+    computed = hmac.new(secret_bytes, payload_to_sign, hashlib.sha256).hexdigest()
 
     is_valid = hmac.compare_digest(computed, expected_sig)
 
@@ -67,7 +64,7 @@ def validate_signature(payload: bytes, signature: str | None) -> bool:
     return is_valid
 
 
-def compute_signature(payload: bytes, secret: str | None = None) -> str:
+def compute_signature(payload: bytes, secret: str) -> str:
     """
     Compute signature for a payload.
 
@@ -75,14 +72,15 @@ def compute_signature(payload: bytes, secret: str | None = None) -> str:
 
     Args:
         payload: Request body bytes
-        secret: Optional secret override (uses config if not provided)
+        secret: The webhook secret
 
     Returns:
         Signature string in Ghost format
     """
-    if secret is None:
-        settings = get_settings()
-        secret = settings.ghost_webhook_secret
+    import time
 
-    computed = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-    return f"sha256={computed}, t={int(__import__('time').time())}"
+    timestamp = str(int(time.time()))
+    # Ghost signs: body + timestamp (concatenated)
+    payload_to_sign = payload + timestamp.encode()
+    computed = hmac.new(secret.encode(), payload_to_sign, hashlib.sha256).hexdigest()
+    return f"sha256={computed}, t={timestamp}"

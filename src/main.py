@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from src.config import get_settings
+from src.config import get_settings, get_site_config, get_site_ids
 from src.logging_config import configure_logging, get_logger, hash_email
 from src.queue import enqueue_event, get_queue, get_redis_connection
 from src.signature import validate_signature
@@ -21,7 +21,8 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("application_starting")
+    sites = get_site_ids()
+    logger.info("application_starting", configured_sites=sites)
     yield
     logger.info("application_shutting_down")
 
@@ -29,7 +30,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Ghost → Campaign Monitor Sync",
     description="Webhook-based integration for syncing Ghost members to Campaign Monitor",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -43,17 +44,19 @@ _metrics = {
 }
 
 
-@app.post("/webhook/ghost")
+@app.post("/webhook/ghost/{site_id}")
 async def handle_ghost_webhook(
+    site_id: str,
     request: Request,
     x_ghost_signature: str | None = Header(None, alias="X-Ghost-Signature"),
 ) -> JSONResponse:
     """
-    Handle incoming Ghost webhook events.
+    Handle incoming Ghost webhook events for a specific site.
 
     Validates signature, acknowledges receipt, and queues for async processing.
 
     Args:
+        site_id: The site identifier from the URL path
         request: FastAPI request object
         x_ghost_signature: Ghost webhook signature header
 
@@ -63,12 +66,21 @@ async def handle_ghost_webhook(
     start_time = time.time()
     _metrics["events_received"] += 1
 
+    # Validate site_id
+    site_config = get_site_config(site_id)
+    if site_config is None:
+        logger.warning("webhook_unknown_site", site_id=site_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown site: {site_id}",
+        )
+
     # Read raw body for signature validation
     body = await request.body()
 
-    # Validate webhook signature
-    if not validate_signature(body, x_ghost_signature):
-        logger.warning("webhook_signature_invalid")
+    # Validate webhook signature using site-specific secret
+    if not validate_signature(body, x_ghost_signature, site_config.ghost_webhook_secret):
+        logger.warning("webhook_signature_invalid", site_id=site_id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook signature",
@@ -78,7 +90,7 @@ async def handle_ghost_webhook(
     try:
         payload: dict[str, Any] = await request.json()
     except Exception as e:
-        logger.error("webhook_payload_parse_error", error=str(e))
+        logger.error("webhook_payload_parse_error", site_id=site_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid JSON payload",
@@ -89,14 +101,18 @@ async def handle_ghost_webhook(
     event_type = _detect_event_type(request, payload)
 
     if event_type is None:
-        logger.warning("webhook_unknown_event_type", payload_keys=list(payload.keys()))
+        logger.warning(
+            "webhook_unknown_event_type",
+            site_id=site_id,
+            payload_keys=list(payload.keys()),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unknown event type",
         )
 
     # Log raw payload for debugging
-    logger.info("webhook_payload_debug", payload=payload)
+    logger.info("webhook_payload_debug", site_id=site_id, payload=payload)
 
     # Extract email for logging - check both current and previous for deleted events
     member_data = payload.get("member", {})
@@ -108,13 +124,14 @@ async def handle_ghost_webhook(
 
     # Queue event for async processing
     try:
-        job_id = enqueue_event(event_type, payload)
+        job_id = enqueue_event(event_type, payload, site_id)
         _metrics["events_processed"] += 1
 
         latency_ms = (time.time() - start_time) * 1000
 
         logger.info(
             "webhook_received",
+            site_id=site_id,
             event_type=event_type,
             email_hash=hash_email(email),
             job_id=job_id,
@@ -125,6 +142,7 @@ async def handle_ghost_webhook(
             status_code=status.HTTP_202_ACCEPTED,
             content={
                 "status": "accepted",
+                "site_id": site_id,
                 "job_id": job_id,
                 "event_type": event_type,
             },
@@ -134,6 +152,7 @@ async def handle_ghost_webhook(
         _metrics["events_failed"] += 1
         logger.error(
             "webhook_queue_error",
+            site_id=site_id,
             event_type=event_type,
             email_hash=hash_email(email),
             error=str(e),
@@ -224,6 +243,9 @@ async def health_check() -> dict[str, Any]:
         checks["checks"]["queue"] = f"unhealthy: {e}"
         checks["status"] = "degraded"
 
+    # List configured sites
+    checks["configured_sites"] = get_site_ids()
+
     status_code = status.HTTP_200_OK if checks["status"] == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE
 
     return JSONResponse(status_code=status_code, content=checks)
@@ -252,6 +274,7 @@ async def metrics() -> dict[str, Any]:
         "events_failed": _metrics["events_failed"],
         "queue_depth": queue_depth,
         "uptime_seconds": uptime.total_seconds(),
+        "configured_sites": get_site_ids(),
         "success_rate": (
             _metrics["events_processed"] / _metrics["events_received"] * 100
             if _metrics["events_received"] > 0

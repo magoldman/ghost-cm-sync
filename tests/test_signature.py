@@ -1,16 +1,12 @@
 """Tests for webhook signature validation."""
 
-import json
 import os
-from unittest.mock import patch
-
-import pytest
-
 
 # Set environment before importing
-os.environ["GHOST_WEBHOOK_SECRET"] = "test-secret-key"
 os.environ["CM_API_KEY"] = "test-cm-api-key"
-os.environ["CM_LIST_ID"] = "test-list-id"
+os.environ["SITE1_NAME"] = "testsite"
+os.environ["SITE1_GHOST_WEBHOOK_SECRET"] = "test-secret-key"
+os.environ["SITE1_CM_LIST_ID"] = "test-list-id"
 
 from src.signature import compute_signature, validate_signature
 
@@ -21,41 +17,52 @@ class TestSignatureValidation:
     def test_valid_signature(self) -> None:
         """Test that valid signatures pass validation."""
         payload = b'{"test": "data"}'
-        signature = compute_signature(payload, "test-secret-key")
+        secret = "test-secret-key"
+        signature = compute_signature(payload, secret)
 
-        assert validate_signature(payload, signature) is True
+        assert validate_signature(payload, signature, secret) is True
 
     def test_invalid_signature(self) -> None:
         """Test that invalid signatures fail validation."""
         payload = b'{"test": "data"}'
+        secret = "test-secret-key"
         signature = "sha256=invalid_signature, t=1234567890"
 
-        assert validate_signature(payload, signature) is False
+        assert validate_signature(payload, signature, secret) is False
 
     def test_missing_signature(self) -> None:
         """Test that missing signatures fail validation."""
         payload = b'{"test": "data"}'
+        secret = "test-secret-key"
 
-        assert validate_signature(payload, None) is False
+        assert validate_signature(payload, None, secret) is False
 
     def test_malformed_signature(self) -> None:
         """Test that malformed signatures fail validation."""
         payload = b'{"test": "data"}'
+        secret = "test-secret-key"
 
         # Missing sha256 prefix
-        assert validate_signature(payload, "just_a_hash") is False
+        assert validate_signature(payload, "just_a_hash", secret) is False
 
         # Empty signature
-        assert validate_signature(payload, "") is False
+        assert validate_signature(payload, "", secret) is False
 
     def test_tampered_payload(self) -> None:
         """Test that tampered payloads fail validation."""
         original_payload = b'{"test": "data"}'
-        signature = compute_signature(original_payload, "test-secret-key")
+        secret = "test-secret-key"
+        signature = compute_signature(original_payload, secret)
 
         tampered_payload = b'{"test": "tampered"}'
 
-        assert validate_signature(tampered_payload, signature) is False
+        assert validate_signature(tampered_payload, signature, secret) is False
+
+    def test_empty_secret_skips_validation(self) -> None:
+        """Test that empty secret skips validation (returns True)."""
+        payload = b'{"test": "data"}'
+
+        assert validate_signature(payload, "any-signature", "") is True
 
 
 class TestComputeSignature:

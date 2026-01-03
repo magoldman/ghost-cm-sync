@@ -97,19 +97,28 @@ sudo cp /opt/ghost-cm-sync/.env.example /opt/ghost-cm-sync/.env
 sudo nano /opt/ghost-cm-sync/.env
 ```
 
-Fill in your actual values:
+Fill in your actual values. The application supports multiple Ghost sites:
 
 ```env
-GHOST_WEBHOOK_SECRET=your-webhook-secret-from-ghost
+# Shared Configuration
 CM_API_KEY=your-campaign-monitor-api-key
-CM_LIST_ID=your-campaign-monitor-list-id
 REDIS_URL=redis://localhost:6379
 PORT=3000
 LOG_LEVEL=info
 
-# For full sync script (optional)
-GHOST_URL=https://your-ghost-site.com
-GHOST_ADMIN_API_KEY=your-ghost-admin-api-key
+# Site 1 Configuration
+SITE1_NAME=mainblog
+SITE1_GHOST_WEBHOOK_SECRET=webhook-secret-for-site1
+SITE1_GHOST_URL=https://blog1.example.com
+SITE1_GHOST_ADMIN_API_KEY=admin-api-key-for-site1
+SITE1_CM_LIST_ID=cm-list-id-for-site1
+
+# Site 2 Configuration (optional, add more sites as needed)
+SITE2_NAME=newsletter
+SITE2_GHOST_WEBHOOK_SECRET=webhook-secret-for-site2
+SITE2_GHOST_URL=https://blog2.example.com
+SITE2_GHOST_ADMIN_API_KEY=admin-api-key-for-site2
+SITE2_CM_LIST_ID=cm-list-id-for-site2
 ```
 
 Secure the environment file:
@@ -171,17 +180,30 @@ sudo systemctl reload nginx
 
 ## 8. Configure Ghost Webhooks
 
+For **each Ghost site** you want to sync:
+
 1. Go to Ghost Admin → Settings → Integrations
 2. Click "Add custom integration"
 3. Name it "Campaign Monitor Sync"
-4. Add three webhooks:
+4. Add three webhooks using your site's name in the URL:
+
+   For site "mainblog" (SITE1_NAME=mainblog):
    - **Event:** Member added
-     **URL:** `https://sync.yourdomain.com/webhook/ghost?event=member.added`
+     **URL:** `https://sync.yourdomain.com/webhook/ghost/mainblog?event=member.added`
    - **Event:** Member updated
-     **URL:** `https://sync.yourdomain.com/webhook/ghost?event=member.updated`
+     **URL:** `https://sync.yourdomain.com/webhook/ghost/mainblog?event=member.updated`
    - **Event:** Member deleted
-     **URL:** `https://sync.yourdomain.com/webhook/ghost?event=member.deleted`
-5. Copy the "Webhook Secret" and update your `.env` file
+     **URL:** `https://sync.yourdomain.com/webhook/ghost/mainblog?event=member.deleted`
+
+   For site "newsletter" (SITE2_NAME=newsletter):
+   - **Event:** Member added
+     **URL:** `https://sync.yourdomain.com/webhook/ghost/newsletter?event=member.added`
+   - **Event:** Member updated
+     **URL:** `https://sync.yourdomain.com/webhook/ghost/newsletter?event=member.updated`
+   - **Event:** Member deleted
+     **URL:** `https://sync.yourdomain.com/webhook/ghost/newsletter?event=member.deleted`
+
+5. Copy the "Webhook Secret" and update your `.env` file with the corresponding SITE{N}_GHOST_WEBHOOK_SECRET
 
 ## 9. Configure Campaign Monitor
 
@@ -215,16 +237,22 @@ sudo journalctl -u ghost-cm-worker -f
 
 ## 11. Initial Sync (Optional)
 
-If you have existing Ghost members, run a full sync:
+If you have existing Ghost members, run a full sync for each site:
 
 ```bash
 cd /opt/ghost-cm-sync
 
-# Dry run first
-sudo -u www-data /opt/ghost-cm-sync/.venv/bin/python scripts/full_sync.py --dry-run
+# List configured sites
+sudo -u www-data /opt/ghost-cm-sync/.venv/bin/python scripts/full_sync.py --list-sites
 
-# Execute sync
-sudo -u www-data /opt/ghost-cm-sync/.venv/bin/python scripts/full_sync.py
+# Dry run first (replace 'mainblog' with your site name)
+sudo -u www-data /opt/ghost-cm-sync/.venv/bin/python scripts/full_sync.py --site mainblog --dry-run
+
+# Execute sync for a specific site
+sudo -u www-data /opt/ghost-cm-sync/.venv/bin/python scripts/full_sync.py --site mainblog
+
+# With verbose output to see names
+sudo -u www-data /opt/ghost-cm-sync/.venv/bin/python scripts/full_sync.py --site mainblog --verbose
 ```
 
 ## Monitoring

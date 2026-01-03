@@ -9,10 +9,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Set test environment variables before importing app
-os.environ["GHOST_WEBHOOK_SECRET"] = "test-secret-key"
 os.environ["CM_API_KEY"] = "test-cm-api-key"
-os.environ["CM_LIST_ID"] = "test-list-id"
 os.environ["REDIS_URL"] = "redis://localhost:6379"
+
+# Multi-site configuration for tests
+os.environ["SITE1_NAME"] = "testsite"
+os.environ["SITE1_GHOST_WEBHOOK_SECRET"] = "test-secret-key"
+os.environ["SITE1_GHOST_URL"] = "https://test-ghost.example.com"
+os.environ["SITE1_GHOST_ADMIN_API_KEY"] = "test-admin-key"
+os.environ["SITE1_CM_LIST_ID"] = "test-list-id"
 
 
 @pytest.fixture
