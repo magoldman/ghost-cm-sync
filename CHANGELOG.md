@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Signature validation now parameterized per-site
 - Campaign Monitor client now accepts list_id at initialization
 
+### Fixed
+
+- Signature computation now correctly includes timestamp in HMAC (was causing validation failures)
+- Unsubscribe now treats "subscriber not in list" (Code 203) as success (idempotent delete)
+- Settings model now ignores SITE*_ variables (fixes startup crash with multi-site config)
+- full_sync.py now explicitly loads .env file from project root
+
 ### Tests
 
 - Added tests for name field serialization in Campaign Monitor payload
