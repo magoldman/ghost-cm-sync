@@ -18,7 +18,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+# Load .env file from project root
+from dotenv import load_dotenv
+
+load_dotenv(project_root / ".env")
 
 import httpx
 import jwt
