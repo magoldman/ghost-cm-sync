@@ -103,6 +103,44 @@ class TestSignatureValidation:
         # This should be rejected due to future timestamp
         assert validate_signature(payload, future_signature, secret) is False
 
+    def test_millisecond_timestamp_accepted(self) -> None:
+        """Test that Ghost's millisecond timestamps are correctly converted to seconds."""
+        import hashlib
+        import hmac
+        import time
+
+        payload = b'{"test": "data"}'
+        secret = "test-secret-key"
+
+        # Ghost sends timestamps in milliseconds (13 digits)
+        current_ms = int(time.time() * 1000)
+        ms_timestamp = str(current_ms)
+        payload_to_sign = payload + ms_timestamp.encode()
+        computed = hmac.new(secret.encode(), payload_to_sign, hashlib.sha256).hexdigest()
+        ms_signature = f"sha256={computed}, t={ms_timestamp}"
+
+        # This should be accepted - the milliseconds should be converted to seconds
+        assert validate_signature(payload, ms_signature, secret) is True
+
+    def test_expired_millisecond_timestamp_rejected(self) -> None:
+        """Test that expired millisecond timestamps are correctly rejected."""
+        import hashlib
+        import hmac
+        import time
+
+        payload = b'{"test": "data"}'
+        secret = "test-secret-key"
+
+        # Create a millisecond timestamp from 10 minutes ago
+        old_ms = int((time.time() - 600) * 1000)  # 10 minutes ago in ms
+        ms_timestamp = str(old_ms)
+        payload_to_sign = payload + ms_timestamp.encode()
+        computed = hmac.new(secret.encode(), payload_to_sign, hashlib.sha256).hexdigest()
+        old_signature = f"sha256={computed}, t={ms_timestamp}"
+
+        # This should be rejected - even with milliseconds, 10 minutes is too old
+        assert validate_signature(payload, old_signature, secret) is False
+
 
 class TestComputeSignature:
     """Tests for compute_signature function."""

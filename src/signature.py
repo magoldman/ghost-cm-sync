@@ -55,8 +55,14 @@ def validate_signature(payload: bytes, signature: str | None, secret: str) -> bo
     # Validate timestamp is within acceptable window to prevent replay attacks
     try:
         ts = int(timestamp)
+        # Ghost sends timestamps in milliseconds - convert to seconds if needed
+        # A timestamp > 10 billion is definitely in milliseconds (year 2286+ in seconds)
+        if ts > 10_000_000_000:
+            ts_seconds = ts // 1000
+        else:
+            ts_seconds = ts
         current_time = int(time.time())
-        age_seconds = abs(current_time - ts)
+        age_seconds = abs(current_time - ts_seconds)
         if age_seconds > SIGNATURE_MAX_AGE_SECONDS:
             logger.warning(
                 "signature_timestamp_expired",
