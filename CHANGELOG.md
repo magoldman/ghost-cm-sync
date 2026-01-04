@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings model now ignores SITE*_ variables (fixes startup crash with multi-site config)
 - full_sync.py now explicitly loads .env file from project root
 - replay_dlq.py now correctly extracts and passes site_id when replaying events
+- Timestamp validation now handles Ghost's millisecond timestamps (converts to seconds before comparison)
 
 ### Tests
 
@@ -71,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests for URL validation, hex secret validation, email sanitization
 - Tests for site_id validation, CM field truncation, error sanitization
 - Tests for rate limiter functionality
+- Tests for millisecond timestamp handling in signature validation
 
 ## [0.1.0] - 2026-01-02
 
