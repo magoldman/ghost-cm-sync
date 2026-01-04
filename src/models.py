@@ -97,3 +97,62 @@ class SyncResult(BaseModel):
     status_changed: bool = False
     previous_status: str | None = None
     new_status: str | None = None
+
+
+# Campaign Monitor API Response Models
+
+
+class CMSubscriberCustomField(BaseModel):
+    """Campaign Monitor subscriber custom field in API response."""
+
+    Key: str
+    Value: str
+
+
+class CMSubscriberResponse(BaseModel):
+    """Campaign Monitor subscriber GET response."""
+
+    EmailAddress: str
+    Name: str = ""
+    Date: str | None = None
+    State: str | None = None  # Active, Unsubscribed, Bounced, Deleted
+    CustomFields: list[CMSubscriberCustomField] = Field(default_factory=list)
+    ReadsEmailWith: str | None = None
+
+
+class CMErrorResponse(BaseModel):
+    """Campaign Monitor API error response."""
+
+    Code: int
+    Message: str
+
+
+class CMListStatsResponse(BaseModel):
+    """Campaign Monitor list statistics response."""
+
+    TotalActiveSubscribers: int = 0
+    TotalUnsubscribes: int = 0
+    TotalDeleted: int = 0
+    TotalBounces: int = 0
+
+
+class CMUnsubscribedResult(BaseModel):
+    """Single unsubscribed subscriber in list response."""
+
+    EmailAddress: str
+    Name: str = ""
+    Date: str
+    State: str = "Unsubscribed"
+
+
+class CMUnsubscribedListResponse(BaseModel):
+    """Campaign Monitor unsubscribed list response."""
+
+    Results: list[CMUnsubscribedResult] = Field(default_factory=list)
+    ResultsOrderedBy: str = "date"
+    OrderDirection: str = "desc"
+    PageNumber: int = 1
+    PageSize: int = 1000
+    RecordsOnThisPage: int = 0
+    TotalNumberOfRecords: int = 0
+    NumberOfPages: int = 1

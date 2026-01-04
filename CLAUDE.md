@@ -159,5 +159,21 @@ Custom fields (configured in CM list):
 - Never commit `.env` files to version control
 - Use secrets management in production (e.g., AWS Secrets Manager, Vault)
 
+### Input Validation
+- `site_id` validated against regex pattern (alphanumeric, hyphens, underscores only)
+- Ghost URLs validated for scheme (HTTPS required) and blocked dangerous hosts (AWS metadata, private IPs)
+- Email addresses sanitized before use in Ghost API filter queries (prevents injection)
+- Hex secrets validated before decoding (prevents crashes on malformed input)
+
+### Data Sanitization
+- Campaign Monitor custom field values truncated to maximum lengths
+- Subscriber names sanitized (control characters removed, length limited)
+- Labels sanitized (commas removed, total length limited)
+- Error messages sanitized to prevent information disclosure (API keys, emails redacted)
+
+### API Rate Limiting
+- CM API calls rate limited to 10 requests/second per site with burst of 20
+- Prevents hitting Campaign Monitor rate limits and service degradation
+
 # DEPLOY instructions
 - found in deploy/DEPLOY.md

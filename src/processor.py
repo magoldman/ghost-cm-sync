@@ -6,20 +6,20 @@ from typing import Any
 
 from src.campaign_monitor import CampaignMonitorError, CircuitBreakerOpen, get_cm_client
 from src.logging_config import get_logger, hash_email
-from src.models import GhostWebhookPayload, SyncResult
+from src.models import CMSubscriberResponse, GhostWebhookPayload, SyncResult
 
 logger = get_logger(__name__)
 
 
 def detect_status_change(
-    current_status: str, cm_subscriber: dict[str, Any] | None
+    current_status: str, cm_subscriber: CMSubscriberResponse | None
 ) -> tuple[bool, str | None]:
     """
     Detect if member status has changed.
 
     Args:
         current_status: Current Ghost member status
-        cm_subscriber: Existing Campaign Monitor subscriber data
+        cm_subscriber: Existing Campaign Monitor subscriber data (validated model)
 
     Returns:
         Tuple of (status_changed, previous_status)
@@ -27,13 +27,12 @@ def detect_status_change(
     if cm_subscriber is None:
         return False, None
 
-    # Extract ghost_status from custom fields
-    custom_fields = cm_subscriber.get("CustomFields", [])
+    # Extract ghost_status from custom fields (now using validated model)
     previous_status = None
 
-    for field in custom_fields:
-        if field.get("Key") == "ghost_status":
-            previous_status = field.get("Value")
+    for field in cm_subscriber.CustomFields:
+        if field.Key == "ghost_status":
+            previous_status = field.Value
             break
 
     if previous_status is None:

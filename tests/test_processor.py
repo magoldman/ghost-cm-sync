@@ -12,6 +12,7 @@ os.environ["SITE1_NAME"] = "testsite"
 os.environ["SITE1_GHOST_WEBHOOK_SECRET"] = "test-secret-key"
 os.environ["SITE1_CM_LIST_ID"] = "test-list-id"
 
+from src.models import CMSubscriberCustomField, CMSubscriberResponse
 from src.processor import detect_status_change, process_event
 
 
@@ -27,11 +28,12 @@ class TestDetectStatusChange:
 
     def test_no_status_change(self) -> None:
         """Test detection when status hasn't changed."""
-        existing = {
-            "CustomFields": [
-                {"Key": "ghost_status", "Value": "paid"},
+        existing = CMSubscriberResponse(
+            EmailAddress="test@example.com",
+            CustomFields=[
+                CMSubscriberCustomField(Key="ghost_status", Value="paid"),
             ]
-        }
+        )
 
         changed, previous = detect_status_change("paid", existing)
 
@@ -40,11 +42,12 @@ class TestDetectStatusChange:
 
     def test_status_changed(self) -> None:
         """Test detection when status has changed."""
-        existing = {
-            "CustomFields": [
-                {"Key": "ghost_status", "Value": "free"},
+        existing = CMSubscriberResponse(
+            EmailAddress="test@example.com",
+            CustomFields=[
+                CMSubscriberCustomField(Key="ghost_status", Value="free"),
             ]
-        }
+        )
 
         changed, previous = detect_status_change("paid", existing)
 
@@ -53,11 +56,12 @@ class TestDetectStatusChange:
 
     def test_no_ghost_status_field(self) -> None:
         """Test detection when ghost_status field doesn't exist."""
-        existing = {
-            "CustomFields": [
-                {"Key": "other_field", "Value": "value"},
+        existing = CMSubscriberResponse(
+            EmailAddress="test@example.com",
+            CustomFields=[
+                CMSubscriberCustomField(Key="other_field", Value="value"),
             ]
-        }
+        )
 
         changed, previous = detect_status_change("paid", existing)
 
@@ -110,9 +114,11 @@ class TestProcessEvent:
     ) -> None:
         """Test processing member.updated with status change."""
         mock_client = MagicMock()
-        mock_client.get_subscriber.return_value = {
-            "CustomFields": [{"Key": "ghost_status", "Value": "free"}]
-        }
+        # Return a CMSubscriberResponse model instead of a dict
+        mock_client.get_subscriber.return_value = CMSubscriberResponse(
+            EmailAddress="test@example.com",
+            CustomFields=[CMSubscriberCustomField(Key="ghost_status", Value="free")]
+        )
         mock_client.add_or_update_subscriber.return_value = {"success": True}
         mock_get_client.return_value = mock_client
 

@@ -33,6 +33,7 @@ from src.campaign_monitor import CampaignMonitorClient, CampaignMonitorError, Ci
 from src.config import get_settings, get_site_config, get_site_ids
 from src.logging_config import configure_logging, get_logger, hash_email
 from src.models import GhostLabel, GhostMemberData
+from src.validation import validate_ghost_url, validate_hex_secret
 
 configure_logging()
 logger = get_logger(__name__)
@@ -41,7 +42,12 @@ logger = get_logger(__name__)
 class GhostAPIClient:
     """Ghost Admin API client for fetching members."""
 
-    def __init__(self, url: str, admin_api_key: str):
+    def __init__(self, url: str, admin_api_key: str, allow_localhost: bool = False):
+        # Validate URL before accepting it
+        is_valid, error = validate_ghost_url(url, allow_localhost=allow_localhost)
+        if not is_valid:
+            raise ValueError(f"Invalid Ghost URL: {error}")
+
         self.url = url.rstrip("/")
         self.admin_api_key = admin_api_key
         self._client: httpx.Client | None = None
@@ -58,6 +64,7 @@ class GhostAPIClient:
                     "Content-Type": "application/json",
                 },
                 timeout=30,
+                verify=True,  # Explicitly enable TLS verification
             )
         return self._client
 
@@ -70,8 +77,10 @@ class GhostAPIClient:
 
         key_id, secret = key_parts
 
-        # Decode the secret from hex
-        secret_bytes = bytes.fromhex(secret)
+        # Validate and decode the secret from hex
+        is_valid, secret_bytes, error = validate_hex_secret(secret)
+        if not is_valid or secret_bytes is None:
+            raise ValueError(f"Invalid Ghost Admin API secret: {error}")
 
         # Create JWT payload
         now = int(time.time())

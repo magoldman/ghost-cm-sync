@@ -24,6 +24,11 @@ import jwt
 
 from src.config import get_settings
 from src.logging_config import configure_logging, get_logger
+from src.validation import (
+    sanitize_email_for_filter,
+    validate_ghost_url,
+    validate_hex_secret,
+)
 
 configure_logging()
 logger = get_logger(__name__)
@@ -32,7 +37,12 @@ logger = get_logger(__name__)
 class GhostAdminClient:
     """Ghost Admin API client for managing members."""
 
-    def __init__(self, url: str, admin_api_key: str):
+    def __init__(self, url: str, admin_api_key: str, allow_localhost: bool = False):
+        # Validate URL before accepting it
+        is_valid, error = validate_ghost_url(url, allow_localhost=allow_localhost)
+        if not is_valid:
+            raise ValueError(f"Invalid Ghost URL: {error}")
+
         self.url = url.rstrip("/")
         self.admin_api_key = admin_api_key
         self._client: httpx.Client | None = None
@@ -45,7 +55,11 @@ class GhostAdminClient:
             raise ValueError("Invalid Ghost Admin API key format. Expected 'id:secret'")
 
         key_id, secret = key_parts
-        secret_bytes = bytes.fromhex(secret)
+
+        # Validate and decode the secret from hex
+        is_valid, secret_bytes, error = validate_hex_secret(secret)
+        if not is_valid or secret_bytes is None:
+            raise ValueError(f"Invalid Ghost Admin API secret: {error}")
 
         now = int(time.time())
         payload = {
@@ -71,15 +85,22 @@ class GhostAdminClient:
                     "Content-Type": "application/json",
                 },
                 timeout=30,
+                verify=True,  # Explicitly enable TLS verification
             )
             self._token_created_at = time.time()
         return self._client
 
     def get_member_by_email(self, email: str) -> dict | None:
         """Fetch a member by email."""
+        # Sanitize email to prevent filter injection
+        is_valid, sanitized_email, error = sanitize_email_for_filter(email)
+        if not is_valid or sanitized_email is None:
+            logger.warning("invalid_email_for_lookup", error=error)
+            return None
+
         response = self.client.get(
             "/members/",
-            params={"filter": f"email:'{email}'", "limit": 1},
+            params={"filter": f"email:'{sanitized_email}'", "limit": 1},
         )
 
         if response.status_code != 200:

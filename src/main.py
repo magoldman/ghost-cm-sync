@@ -15,6 +15,7 @@ from src.config import get_settings, get_site_config, get_site_ids
 from src.logging_config import configure_logging, get_logger, hash_email
 from src.queue import enqueue_event, get_queue, get_redis_connection
 from src.signature import validate_signature
+from src.validation import validate_site_id
 
 # Configure logging on startup
 configure_logging()
@@ -77,13 +78,21 @@ async def handle_ghost_webhook(
     start_time = time.time()
     _metrics["events_received"] += 1
 
-    # Validate site_id
+    # Validate site_id format first (prevents enumeration and injection)
+    if not validate_site_id(site_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid site identifier",
+        )
+
+    # Validate site exists
     site_config = get_site_config(site_id)
     if site_config is None:
+        # Use consistent error to prevent site enumeration
         logger.warning("webhook_unknown_site", site_id=site_id)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown site: {site_id}",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid request",
         )
 
     # Read raw body for signature validation

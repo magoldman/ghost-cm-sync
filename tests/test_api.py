@@ -49,7 +49,7 @@ class TestWebhookEndpoint:
         client: TestClient,
         sample_ghost_payload: dict[str, Any],
     ) -> None:
-        """Test webhook for unknown site returns 404."""
+        """Test webhook for unknown site returns 401 (to prevent site enumeration)."""
         payload_bytes = json.dumps(sample_ghost_payload).encode()
         signature = compute_signature(payload_bytes, "test-secret-key")
 
@@ -62,7 +62,8 @@ class TestWebhookEndpoint:
             },
         )
 
-        assert response.status_code == 404
+        # Returns 401 instead of 404 to prevent site enumeration attacks
+        assert response.status_code == 401
 
     def test_missing_signature(
         self,

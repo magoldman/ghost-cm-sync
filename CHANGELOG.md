@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added rate limiting on webhook endpoint (100 requests/minute per IP via slowapi)
 - Removed debug logging of raw webhook payloads (PII protection)
 - Fixed DLQ replay script to properly pass site_id to process_event
+- Added Ghost URL validation (HTTPS required, blocks AWS/GCP metadata endpoints, private IPs)
+- Added hex secret validation with proper error handling
+- Added email sanitization for Ghost API filter queries (prevents injection)
+- Added site_id format validation (alphanumeric, hyphens, underscores only)
+- Added CM custom field length limits and sanitization
+- Added CM API error message sanitization (prevents information disclosure)
+- Added per-site rate limiting for CM API calls (10 req/sec with burst of 20)
+- Added Pydantic models for CM API response validation
+- Unknown site now returns 401 instead of 404 (prevents site enumeration)
 
 ### Fixed
 
@@ -58,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added tests for QueuedEvent site_id field
 - Added tests for mandatory webhook secret validation
 - Added tests for expired/future signature timestamp rejection
+- Added comprehensive test suite for validation module (43 new tests)
+- Tests for URL validation, hex secret validation, email sanitization
+- Tests for site_id validation, CM field truncation, error sanitization
+- Tests for rate limiter functionality
 
 ## [0.1.0] - 2026-01-02
 
