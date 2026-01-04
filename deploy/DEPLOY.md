@@ -97,7 +97,9 @@ sudo cp /opt/ghost-cm-sync/.env.example /opt/ghost-cm-sync/.env
 sudo nano /opt/ghost-cm-sync/.env
 ```
 
-Fill in your actual values. The application supports multiple Ghost sites:
+Fill in your actual values. The application supports multiple Ghost sites.
+
+> **Security Note**: Webhook secrets are **mandatory**. The application will fail to validate webhooks if secrets are not configured. Ghost URLs must use HTTPS in production.
 
 ```env
 # Shared Configuration
@@ -344,3 +346,36 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw enable
 ```
+
+## Security Considerations
+
+### Mandatory Configuration
+- **Webhook secrets**: Required for all sites. Application will reject webhooks without valid signatures.
+- **HTTPS**: Ghost URLs must use HTTPS in production (HTTP only allowed for localhost in development).
+
+### Rate Limiting
+- Webhook endpoint: 100 requests/minute per IP (application-level)
+- Campaign Monitor API: 10 requests/second per site with burst of 20
+- Consider adding nginx rate limiting as shown in the nginx config
+
+### Environment File Security
+```bash
+# Ensure .env is only readable by the application user
+sudo chmod 600 /opt/ghost-cm-sync/.env
+sudo chown www-data:www-data /opt/ghost-cm-sync/.env
+```
+
+### Monitoring for Security
+```bash
+# Watch for signature validation failures (potential attacks)
+sudo journalctl -u ghost-cm-sync | grep -i "signature"
+
+# Watch for rate limit hits
+sudo journalctl -u ghost-cm-sync | grep -i "rate"
+```
+
+### Regular Maintenance
+- Rotate webhook secrets periodically in Ghost and update `.env`
+- Rotate Campaign Monitor API key periodically
+- Keep the application updated with `git pull` and reinstall
+- Monitor logs for unusual patterns

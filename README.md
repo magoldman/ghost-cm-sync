@@ -12,6 +12,7 @@ A webhook-based integration that synchronizes Ghost membership data to Campaign 
 - Exponential backoff retry with dead letter queue
 - Full sync capability for initial migration and recovery
 - Health check and metrics endpoints
+- **Security hardened**: Input validation, rate limiting, SSRF protection
 
 ## Requirements
 
@@ -264,6 +265,36 @@ ruff check src
 # Format code
 ruff format src
 ```
+
+## Security
+
+This integration includes multiple security measures:
+
+### Authentication & Validation
+- **Mandatory webhook secrets**: Application fails to start if webhook secrets are not configured
+- **HMAC-SHA256 signature validation**: All webhook requests are cryptographically verified
+- **Timestamp validation**: Signatures older than 5 minutes are rejected (replay attack prevention)
+- **Site ID validation**: Only alphanumeric, hyphens, and underscores allowed (1-50 chars)
+
+### Rate Limiting
+- **Webhook endpoint**: 100 requests/minute per IP address
+- **Campaign Monitor API**: 10 requests/second per site with burst of 20
+
+### Input Sanitization
+- **Ghost URLs**: HTTPS required, blocks AWS/GCP metadata endpoints and private IPs
+- **Email addresses**: Sanitized before use in Ghost API filters (prevents injection)
+- **Custom fields**: Length-limited and sanitized before sending to Campaign Monitor
+- **Error messages**: API keys and email addresses are redacted from error output
+
+### Privacy
+- **No PII logging**: Raw webhook payloads are never logged
+- **Email hashing**: Email addresses are SHA-256 hashed in log output
+
+### Best Practices
+- Store secrets in environment variables, never in code
+- Use HTTPS for all Ghost webhook URLs
+- Regularly rotate API keys and webhook secrets
+- Monitor logs for security anomalies
 
 ## License
 
