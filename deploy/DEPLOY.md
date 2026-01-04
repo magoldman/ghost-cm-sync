@@ -304,6 +304,18 @@ sudo -u www-data cat /opt/ghost-cm-sync/.env
 2. Verify SSL certificate is valid
 3. Check nginx logs: `sudo tail -f /var/log/nginx/ghost-cm-sync.error.log`
 
+### Signature validation failing
+
+```bash
+# Check for signature-related errors
+sudo journalctl -u ghost-cm-sync | grep -i "signature"
+```
+
+Common issues:
+- **"signature_timestamp_expired"**: Ensure server clock is synchronized (`timedatectl status`). The application handles both second and millisecond timestamps from Ghost.
+- **"signature_mismatch"**: Verify the webhook secret in `.env` matches Ghost's integration settings exactly.
+- **"webhook secret not configured"**: Ensure `SITE*_GHOST_WEBHOOK_SECRET` is set for the site.
+
 ### Campaign Monitor API errors
 
 1. Verify CM_API_KEY and CM_LIST_ID are correct

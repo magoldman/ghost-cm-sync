@@ -233,7 +233,8 @@ server {
 | Symptom | Likely Cause | Resolution |
 |---------|--------------|------------|
 | Subscribers not appearing | Webhook not firing | Verify Ghost webhook config |
-| Status not updating | Signature validation failing | Check GHOST_WEBHOOK_SECRET |
+| Status not updating | Signature validation failing | Check GHOST_WEBHOOK_SECRET matches Ghost |
+| "signature_timestamp_expired" | Server clock out of sync | Run `timedatectl status` to verify |
 | Intermittent failures | CM rate limiting | Check backoff logic |
 | Duplicate subscribers | Idempotency issue | Check event processing |
 
