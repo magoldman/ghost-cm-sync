@@ -34,12 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Signature validation now parameterized per-site
 - Campaign Monitor client now accepts list_id at initialization
 
+### Security
+
+- **BREAKING**: Webhook secrets are now mandatory - validation raises error if secret is missing (fail-safe)
+- Added timestamp validation to signatures - rejects signatures older than 5 minutes (replay attack prevention)
+- Added rate limiting on webhook endpoint (100 requests/minute per IP via slowapi)
+- Removed debug logging of raw webhook payloads (PII protection)
+- Fixed DLQ replay script to properly pass site_id to process_event
+
 ### Fixed
 
 - Signature computation now correctly includes timestamp in HMAC (was causing validation failures)
 - Unsubscribe now treats "subscriber not in list" (Code 203) as success (idempotent delete)
 - Settings model now ignores SITE*_ variables (fixes startup crash with multi-site config)
 - full_sync.py now explicitly loads .env file from project root
+- replay_dlq.py now correctly extracts and passes site_id when replaying events
 
 ### Tests
 
@@ -47,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added test to verify name is passed through event processor
 - Updated all tests for multi-site endpoint pattern
 - Added tests for QueuedEvent site_id field
+- Added tests for mandatory webhook secret validation
+- Added tests for expired/future signature timestamp rejection
 
 ## [0.1.0] - 2026-01-02
 

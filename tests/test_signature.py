@@ -58,11 +58,50 @@ class TestSignatureValidation:
 
         assert validate_signature(tampered_payload, signature, secret) is False
 
-    def test_empty_secret_skips_validation(self) -> None:
-        """Test that empty secret skips validation (returns True)."""
+    def test_empty_secret_raises_error(self) -> None:
+        """Test that empty secret raises ValueError (security requirement)."""
+        import pytest
+
         payload = b'{"test": "data"}'
 
-        assert validate_signature(payload, "any-signature", "") is True
+        with pytest.raises(ValueError, match="Webhook secret is required"):
+            validate_signature(payload, "any-signature", "")
+
+    def test_expired_signature_rejected(self) -> None:
+        """Test that signatures older than 5 minutes are rejected."""
+        import hashlib
+        import hmac
+        import time
+
+        payload = b'{"test": "data"}'
+        secret = "test-secret-key"
+
+        # Create a signature with an old timestamp (10 minutes ago)
+        old_timestamp = str(int(time.time()) - 600)  # 10 minutes ago
+        payload_to_sign = payload + old_timestamp.encode()
+        computed = hmac.new(secret.encode(), payload_to_sign, hashlib.sha256).hexdigest()
+        old_signature = f"sha256={computed}, t={old_timestamp}"
+
+        # This should be rejected due to expired timestamp
+        assert validate_signature(payload, old_signature, secret) is False
+
+    def test_future_signature_rejected(self) -> None:
+        """Test that signatures with future timestamps are rejected."""
+        import hashlib
+        import hmac
+        import time
+
+        payload = b'{"test": "data"}'
+        secret = "test-secret-key"
+
+        # Create a signature with a future timestamp (10 minutes from now)
+        future_timestamp = str(int(time.time()) + 600)  # 10 minutes in future
+        payload_to_sign = payload + future_timestamp.encode()
+        computed = hmac.new(secret.encode(), payload_to_sign, hashlib.sha256).hexdigest()
+        future_signature = f"sha256={computed}, t={future_timestamp}"
+
+        # This should be rejected due to future timestamp
+        assert validate_signature(payload, future_signature, secret) is False
 
 
 class TestComputeSignature:

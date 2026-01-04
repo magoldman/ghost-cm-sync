@@ -2,8 +2,12 @@
 
 import hashlib
 import hmac
+import time
 
 from src.logging_config import get_logger
+
+# Maximum age in seconds for a valid signature (5 minutes)
+SIGNATURE_MAX_AGE_SECONDS = 300
 
 logger = get_logger(__name__)
 
@@ -23,10 +27,10 @@ def validate_signature(payload: bytes, signature: str | None, secret: str) -> bo
     Returns:
         True if signature is valid, False otherwise
     """
-    # If no secret configured, skip validation (not recommended for production)
+    # Webhook secret is mandatory - reject if not configured
     if not secret:
-        logger.warning("signature_validation_disabled", reason="no secret configured")
-        return True
+        logger.error("signature_validation_failed", reason="webhook secret not configured")
+        raise ValueError("Webhook secret is required for signature validation")
 
     if not signature:
         logger.warning("signature_missing")
@@ -46,6 +50,23 @@ def validate_signature(payload: bytes, signature: str | None, secret: str) -> bo
 
     if not timestamp:
         logger.warning("signature_timestamp_missing", signature=signature)
+        return False
+
+    # Validate timestamp is within acceptable window to prevent replay attacks
+    try:
+        ts = int(timestamp)
+        current_time = int(time.time())
+        age_seconds = abs(current_time - ts)
+        if age_seconds > SIGNATURE_MAX_AGE_SECONDS:
+            logger.warning(
+                "signature_timestamp_expired",
+                timestamp=timestamp,
+                age_seconds=age_seconds,
+                max_age_seconds=SIGNATURE_MAX_AGE_SECONDS,
+            )
+            return False
+    except (ValueError, TypeError):
+        logger.warning("signature_timestamp_invalid", timestamp=timestamp)
         return False
 
     # Ghost signs: body + timestamp (concatenated)
@@ -77,8 +98,6 @@ def compute_signature(payload: bytes, secret: str) -> str:
     Returns:
         Signature string in Ghost format
     """
-    import time
-
     timestamp = str(int(time.time()))
     # Ghost signs: body + timestamp (concatenated)
     payload_to_sign = payload + timestamp.encode()

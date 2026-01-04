@@ -128,9 +128,36 @@ Custom fields (configured in CM list):
 
 ## API Endpoints
 
-- `POST /webhook/ghost/{site_id}` - Ghost webhook receiver (site-specific)
+- `POST /webhook/ghost/{site_id}` - Ghost webhook receiver (site-specific, rate limited)
 - `GET /health` - Health check endpoint (shows configured sites)
 - `GET /metrics` - Prometheus metrics (if enabled)
+
+## Security
+
+### Webhook Signature Validation
+- HMAC-SHA256 signature validation is **mandatory** for all webhook requests
+- Webhook secrets must be configured for each site (`SITE*_GHOST_WEBHOOK_SECRET`)
+- Application will raise an error if webhook secret is missing (fail-safe)
+
+### Replay Attack Prevention
+- Webhook signatures include a timestamp component
+- Signatures older than **5 minutes** are automatically rejected
+- Prevents replay of captured webhook payloads
+
+### Rate Limiting
+- Webhook endpoint is rate limited to **100 requests per minute** per IP address
+- Protects against DoS attacks and webhook flooding
+- Returns HTTP 429 when limit is exceeded
+
+### Privacy & Logging
+- PII (email addresses, names) is never logged in plain text
+- Email addresses are hashed in log output for debugging
+- Raw webhook payloads are not logged
+
+### Configuration Security
+- All API keys and secrets loaded from environment variables
+- Never commit `.env` files to version control
+- Use secrets management in production (e.g., AWS Secrets Manager, Vault)
 
 # DEPLOY instructions
 - found in deploy/DEPLOY.md

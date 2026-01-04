@@ -63,6 +63,7 @@ def replay_event(event_data: dict) -> dict:
     queued_event = original_args[0]
     event_type = queued_event.get("event_type")
     payload = queued_event.get("payload")
+    site_id = queued_event.get("site_id")
 
     if not event_type or not payload:
         return {
@@ -70,8 +71,14 @@ def replay_event(event_data: dict) -> dict:
             "error": "Invalid event structure",
         }
 
+    if not site_id:
+        return {
+            "success": False,
+            "error": "Missing site_id in event data",
+        }
+
     try:
-        result = process_event(event_type, payload)
+        result = process_event(event_type, payload, site_id)
         return {
             "success": result.success,
             "email": result.email,

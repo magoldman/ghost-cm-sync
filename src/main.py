@@ -7,6 +7,9 @@ from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from src.config import get_settings, get_site_config, get_site_ids
 from src.logging_config import configure_logging, get_logger, hash_email
@@ -16,6 +19,9 @@ from src.signature import validate_signature
 # Configure logging on startup
 configure_logging()
 logger = get_logger(__name__)
+
+# Rate limiter - 100 requests per minute per IP address
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -34,6 +40,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configure rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 # Request metrics
 _metrics = {
@@ -45,6 +55,7 @@ _metrics = {
 
 
 @app.post("/webhook/ghost/{site_id}")
+@limiter.limit("100/minute")
 async def handle_ghost_webhook(
     site_id: str,
     request: Request,
@@ -110,9 +121,6 @@ async def handle_ghost_webhook(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unknown event type",
         )
-
-    # Log raw payload for debugging
-    logger.info("webhook_payload_debug", site_id=site_id, payload=payload)
 
     # Extract email for logging - check both current and previous for deleted events
     member_data = payload.get("member", {})
