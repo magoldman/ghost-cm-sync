@@ -194,6 +194,16 @@ def sync_member(
         # Check existing subscriber for status change detection
         existing = cm_client.get_subscriber(member.email)
 
+        # Respect prior opt-outs: never reactivate Unsubscribed/Bounced/Deleted subscribers
+        if existing and existing.State in ("Unsubscribed", "Bounced", "Deleted"):
+            return {
+                "email": member.email,
+                "name": member.name,
+                "status": member.status,
+                "action": "skipped_cm_opt_out",
+                "cm_state": existing.State,
+            }
+
         previous_status = None
         status_changed = False
 
@@ -377,6 +387,7 @@ def main() -> int:
             "status_changes": 0,
             "unsubscribed": 0,
             "skipped_not_in_list": 0,
+            "skipped_cm_opt_out": 0,
         }
 
         # Step 1: Sync active members (add or update)
@@ -394,6 +405,11 @@ def main() -> int:
                 if args.verbose:
                     name_display = member.name or ""
                     print(f"  ✓ {member.email} | {name_display} | {member.status}")
+            elif result["action"] == "skipped_cm_opt_out":
+                results["skipped_cm_opt_out"] += 1
+                if args.verbose:
+                    name_display = member.name or ""
+                    print(f"  ⊘ {member.email} | {name_display} | CM state: {result.get('cm_state')}")
             else:
                 results["failed"] += 1
                 print(f"  ✗ Failed: {member.email} - {result.get('error')}")
@@ -454,6 +470,7 @@ def main() -> int:
         print("Active members:")
         print(f"  Synced: {results['synced']}")
         print(f"  Failed: {results['failed']}")
+        print(f"  Skipped (CM opt-out preserved): {results['skipped_cm_opt_out']}")
         print(f"  Status changes detected: {results['status_changes']}")
         print()
         print("Disabled members:")

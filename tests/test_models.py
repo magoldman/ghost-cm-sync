@@ -105,7 +105,7 @@ class TestCMSubscriberPayload:
 
         assert payload.EmailAddress == "test@example.com"
         assert len(payload.CustomFields) == 2
-        assert payload.Resubscribe is True
+        assert payload.Resubscribe is False  # default: never reactivate opted-out subscribers
         assert payload.ConsentToTrack == "Yes"
 
     def test_subscriber_payload_name_serialization(self) -> None:

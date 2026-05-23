@@ -59,6 +59,24 @@ def process_member_added(payload: GhostWebhookPayload, site_id: str) -> SyncResu
     try:
         # Check if subscriber already exists (for resubscription case)
         existing = client.get_subscriber(member.email)
+
+        # Respect prior opt-outs: never reactivate Unsubscribed/Bounced/Deleted subscribers
+        if existing and existing.State in ("Unsubscribed", "Bounced", "Deleted"):
+            logger.info(
+                "skipped_cm_opt_out",
+                site_id=site_id,
+                email_hash=hash_email(member.email),
+                cm_state=existing.State,
+                event_type="member.added",
+            )
+            return SyncResult(
+                success=True,
+                email=member.email,
+                event_type="member.added",
+                message=f"Skipped: CM subscriber state is {existing.State}",
+                latency_ms=(time.time() - start_time) * 1000,
+            )
+
         status_changed, previous_status = detect_status_change(member.status, existing)
 
         status_changed_at = datetime.now(timezone.utc) if status_changed else None
@@ -117,6 +135,24 @@ def process_member_updated(payload: GhostWebhookPayload, site_id: str) -> SyncRe
     try:
         # Get current subscriber to detect status changes
         existing = client.get_subscriber(member.email)
+
+        # Respect prior opt-outs: never reactivate Unsubscribed/Bounced/Deleted subscribers
+        if existing and existing.State in ("Unsubscribed", "Bounced", "Deleted"):
+            logger.info(
+                "skipped_cm_opt_out",
+                site_id=site_id,
+                email_hash=hash_email(member.email),
+                cm_state=existing.State,
+                event_type="member.updated",
+            )
+            return SyncResult(
+                success=True,
+                email=member.email,
+                event_type="member.updated",
+                message=f"Skipped: CM subscriber state is {existing.State}",
+                latency_ms=(time.time() - start_time) * 1000,
+            )
+
         status_changed, previous_status = detect_status_change(member.status, existing)
 
         status_changed_at = datetime.now(timezone.utc) if status_changed else None

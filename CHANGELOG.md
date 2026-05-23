@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Never resubscribe opted-out or bounced subscribers.** `CMSubscriberPayload.Resubscribe` was hardcoded to `True`, causing both webhook sync and `full_sync.py` to forcibly reactivate anyone with State Unsubscribed/Bounced/Deleted in Campaign Monitor. Default is now `False` and the upsert path is gated by an explicit State check (subscribers in non-Active states are skipped and logged as `skipped_cm_opt_out`). Surfaced when the 2026-05-23 backfill silently reactivated previously-unsubscribed users.
+
 ## [0.2.0] - 2026-05-23
 
 ### Added

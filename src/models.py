@@ -65,7 +65,9 @@ class CMSubscriberPayload(BaseModel):
     EmailAddress: EmailStr
     Name: str = ""
     CustomFields: list[CMCustomField] = Field(default_factory=list)
-    Resubscribe: bool = True
+    # Defaults to False — never reactivate someone who unsubscribed or bounced.
+    # Callers must check existing State and skip upsert for non-Active subscribers.
+    Resubscribe: bool = False
     ConsentToTrack: str = "Yes"
 
 

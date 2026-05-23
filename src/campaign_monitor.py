@@ -258,7 +258,6 @@ class CampaignMonitorClient:
             EmailAddress=member.email,
             Name=sanitized_name,
             CustomFields=custom_fields,
-            Resubscribe=True,
             ConsentToTrack="Yes",
         )
 
