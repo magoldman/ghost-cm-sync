@@ -142,11 +142,16 @@ class GhostAdminClient:
 
 
 def build_cm_payload(member: dict) -> dict:
-    """Mirror the same custom-field shape full_sync uses, with Resubscribe=True."""
+    """Mirror the same custom-field shape full_sync uses, with Resubscribe=True.
+
+    ghost_email_enabled reflects the post-restoration intent (True), not the
+    member's current Ghost subscribed value — at read time it's likely False
+    from cleanup_backfill_damage.py, but we're about to set Ghost subscribed=true.
+    """
     email = member.get("email") or ""
     name = sanitize_cm_name(member.get("name"))
     status = member.get("status") or "free"
-    subscribed = member.get("subscribed", True)
+    subscribed = True  # intent: this script restores them to subscribed
     labels = member.get("labels") or []
 
     # Coerce labels to simple objects with .name for sanitize_cm_labels
