@@ -286,6 +286,59 @@ curl -s https://sync.yourdomain.com/health | jq
 curl -s https://sync.yourdomain.com/metrics | jq
 ```
 
+## Failure Alerts (Slack)
+
+Both `ghost-cm-sync.service` and `ghost-cm-worker.service` are configured with `OnFailure=alert-failure@%n.service`. When either enters the `failed` state, systemd starts a template service that runs `/usr/local/bin/slack-alert-failure.sh`, which tails ~20 lines of journal output for the failed unit and POSTs it to a Slack incoming webhook.
+
+### Setup
+
+1. Create a Slack incoming webhook at <https://api.slack.com/apps> → your app → Incoming Webhooks → Add to channel. Copy the URL.
+
+2. Install the script and template service:
+
+   ```bash
+   cd /opt/ghost-cm-sync
+   sudo install -m 0755 -o root -g root deploy/slack-alert-failure.sh /usr/local/bin/slack-alert-failure.sh
+   sudo cp deploy/alert-failure@.service /etc/systemd/system/
+   ```
+
+3. Create the secrets file with your webhook URL:
+
+   ```bash
+   sudo mkdir -p /etc/ghost-cm-sync
+   sudo cp deploy/notify.env.example /etc/ghost-cm-sync/notify.env
+   sudo chmod 600 /etc/ghost-cm-sync/notify.env
+   sudo chown root:root /etc/ghost-cm-sync/notify.env
+   sudo nano /etc/ghost-cm-sync/notify.env   # paste your SLACK_WEBHOOK_URL
+   ```
+
+4. Reload systemd so the updated `ghost-cm-sync.service` / `ghost-cm-worker.service` unit files take effect:
+
+   ```bash
+   sudo cp deploy/ghost-cm-sync.service /etc/systemd/system/
+   sudo cp deploy/ghost-cm-worker.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl restart ghost-cm-sync ghost-cm-worker
+   ```
+
+### Testing
+
+Trigger the alert path without touching the real services:
+
+```bash
+sudo systemctl start alert-failure@ghost-cm-sync.service.service
+```
+
+A Slack message should arrive within seconds. If not, check `journalctl -u alert-failure@ghost-cm-sync.service.service` for script errors.
+
+### What it doesn't catch
+
+OnFailure only fires when systemd marks a unit `failed` (e.g., crash beyond `Restart=` limits). It does **not** catch:
+- Service running fine but receiving no inbound traffic (e.g., Ghost stopped delivering webhooks). See [Troubleshooting: Webhooks not being received](#webhooks-not-being-received).
+- Errors logged by the app that don't crash it (signature failures, CM API errors, etc.).
+
+For those, monitor via `journalctl -u ghost-cm-sync -f` or set up an external uptime/log monitor.
+
 ## Troubleshooting
 
 ### Service won't start
@@ -300,9 +353,36 @@ sudo -u www-data cat /opt/ghost-cm-sync/.env
 
 ### Webhooks not being received
 
-1. Check Ghost webhook configuration
+1. Check Ghost webhook configuration in Ghost Admin → Settings → Integrations
 2. Verify SSL certificate is valid
-3. Check nginx logs: `sudo tail -f /var/log/nginx/ghost-cm-sync.error.log`
+3. Check nginx logs: `sudo tail -f /var/log/nginx/ghost-cm-sync.access.log /var/log/nginx/ghost-cm-sync.error.log`
+4. **Check Ghost's own outbound error log** (most diagnostic — does Ghost think delivery succeeded?):
+   ```bash
+   sudo grep -iE "WEBHOOK_DELIVERY_FAILURE|URL_PRIVATE_INVALID" \
+       /var/www/*/content/logs/*.error.log | tail -20
+   ```
+
+#### Ghost shows "Last triggered" but nginx sees nothing
+
+Ghost's UI updates "Last triggered" even when its outbound HTTP client *aborts* the delivery. If `production.error.log` shows:
+
+```
+[WEBHOOK_DELIVERY_FAILURE] ... error_code=URL_PRIVATE_INVALID
+message=URL resolves to a non-permitted private IP block
+```
+
+...Ghost is refusing to deliver because the webhook hostname resolves to a private/loopback IP. This typically happens when `/etc/hosts` maps the webhook host's FQDN to `127.0.1.1` (Ubuntu's default for the local hostname).
+
+**Fix:** edit `/etc/hosts` and remove the FQDN from the loopback line, keeping only the short hostname:
+
+```
+# Before
+127.0.1.1 publishing.example.com publishing
+# After
+127.0.1.1 publishing
+```
+
+The FQDN then resolves via public DNS to the server's public IP. The kernel still short-circuits the connection through loopback, but Ghost's SSRF check only inspects the destination IP — it permits the now-public address. No service restart needed; Ghost re-resolves per request.
 
 ### Signature validation failing
 

@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-site Campaign Monitor client caching
 - Site ID tracking in queued events for proper routing
 - Health endpoint now shows configured sites
+- Slack failure alerts via systemd `OnFailure=` (`deploy/slack-alert-failure.sh`, `deploy/alert-failure@.service`, `deploy/notify.env.example`); fires when either unit enters the failed state, posting the last 20 journal lines to a Slack incoming webhook
 
 ### Improved
 
@@ -59,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - full_sync.py now explicitly loads .env file from project root
 - replay_dlq.py now correctly extracts and passes site_id when replaying events
 - Timestamp validation now handles Ghost's millisecond timestamps (converts to seconds before comparison)
+- `full_sync.py` no longer crashes on members that already exist in Campaign Monitor: `get_subscriber()` returns a Pydantic `CMSubscriberResponse` model now, and the script was still using dict-style `.get()` access
 
 ### Tests
 
