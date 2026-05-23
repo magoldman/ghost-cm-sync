@@ -152,3 +152,56 @@ class TestProcessEvent:
 
         assert result.success is False
         assert "Unknown event type" in result.message
+
+    @pytest.mark.parametrize("opt_out_state", ["Unsubscribed", "Bounced", "Deleted"])
+    @patch("src.processor.get_cm_client")
+    def test_process_member_added_skips_opted_out(
+        self,
+        mock_get_client: MagicMock,
+        sample_ghost_payload: dict[str, Any],
+        opt_out_state: str,
+    ) -> None:
+        """member.added must NOT reactivate subscribers who opted out / bounced / were deleted.
+
+        Regression guard: CMSubscriberPayload.Resubscribe was hardcoded True until
+        2026-05-23, silently reactivating opted-out users. Both the model default
+        and this State check protect against that recurring.
+        """
+        mock_client = MagicMock()
+        mock_client.get_subscriber.return_value = CMSubscriberResponse(
+            EmailAddress="test@example.com",
+            State=opt_out_state,
+            CustomFields=[CMSubscriberCustomField(Key="ghost_status", Value="free")],
+        )
+        mock_get_client.return_value = mock_client
+
+        result = process_event("member.added", sample_ghost_payload, "testsite")
+
+        assert result.success is True
+        assert "Skipped" in result.message
+        assert opt_out_state in result.message
+        mock_client.add_or_update_subscriber.assert_not_called()
+
+    @pytest.mark.parametrize("opt_out_state", ["Unsubscribed", "Bounced", "Deleted"])
+    @patch("src.processor.get_cm_client")
+    def test_process_member_updated_skips_opted_out(
+        self,
+        mock_get_client: MagicMock,
+        sample_ghost_update_payload: dict[str, Any],
+        opt_out_state: str,
+    ) -> None:
+        """member.updated must NOT reactivate subscribers who opted out / bounced / were deleted."""
+        mock_client = MagicMock()
+        mock_client.get_subscriber.return_value = CMSubscriberResponse(
+            EmailAddress="test@example.com",
+            State=opt_out_state,
+            CustomFields=[CMSubscriberCustomField(Key="ghost_status", Value="free")],
+        )
+        mock_get_client.return_value = mock_client
+
+        result = process_event("member.updated", sample_ghost_update_payload, "testsite")
+
+        assert result.success is True
+        assert "Skipped" in result.message
+        assert opt_out_state in result.message
+        mock_client.add_or_update_subscriber.assert_not_called()

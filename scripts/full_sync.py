@@ -181,17 +181,8 @@ def sync_member(
     Returns:
         Sync result dictionary
     """
-    if dry_run:
-        return {
-            "email": member.email,
-            "name": member.name,
-            "status": member.status,
-            "action": "would_sync",
-            "dry_run": True,
-        }
-
     try:
-        # Check existing subscriber for status change detection
+        # Read-path runs in dry-run too so counts reflect real CM state
         existing = cm_client.get_subscriber(member.email)
 
         # Respect prior opt-outs: never reactivate Unsubscribed/Bounced/Deleted subscribers
@@ -215,6 +206,17 @@ def sync_member(
                         previous_status = field.Value
                         status_changed = True
                     break
+
+        if dry_run:
+            return {
+                "email": member.email,
+                "name": member.name,
+                "status": member.status,
+                "action": "would_sync",
+                "dry_run": True,
+                "status_changed": status_changed,
+                "previous_status": previous_status,
+            }
 
         status_changed_at = datetime.now(timezone.utc) if status_changed else None
 
@@ -289,7 +291,7 @@ def main() -> int:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Preview changes without applying them",
+        help="Preview changes without applying them. Still calls CM's read endpoints so opt-out / status-change counts are accurate.",
     )
     parser.add_argument(
         "--limit",
@@ -429,34 +431,30 @@ def main() -> int:
                 if not email:
                     continue
 
-                if args.dry_run:
-                    # In dry run, we'd check if they exist
-                    results["unsubscribed"] += 1
-                else:
-                    try:
-                        # First check if subscriber exists in CM
-                        existing = cm_client.get_subscriber(email)
+                try:
+                    # Always query CM so dry-run counts reflect real list membership
+                    existing = cm_client.get_subscriber(email)
 
-                        if existing is None:
-                            # Not in list, skip
-                            results["skipped_not_in_list"] += 1
-                        else:
-                            # Exists in CM, unsubscribe them
-                            cm_client.unsubscribe(email)
-                            results["unsubscribed"] += 1
+                    if existing is None:
+                        results["skipped_not_in_list"] += 1
+                    elif args.dry_run:
+                        results["unsubscribed"] += 1
+                    else:
+                        cm_client.unsubscribe(email)
+                        results["unsubscribed"] += 1
 
-                    except CampaignMonitorError as e:
-                        # Log but don't count as failure for "not in list" type errors
-                        error_str = str(e).lower()
-                        if "203" in str(e) or "not in list" in error_str:
-                            results["skipped_not_in_list"] += 1
-                        else:
-                            print(f"  Error processing {email}: {e}")
-                    except CircuitBreakerOpen:
-                        print(f"  Circuit breaker open - waiting 10 seconds...")
-                        time.sleep(10)
-                        cm_client._circuit_open_until = None
-                        cm_client._failure_count = 0
+                except CampaignMonitorError as e:
+                    # Log but don't count as failure for "not in list" type errors
+                    error_str = str(e).lower()
+                    if "203" in str(e) or "not in list" in error_str:
+                        results["skipped_not_in_list"] += 1
+                    else:
+                        print(f"  Error processing {email}: {e}")
+                except CircuitBreakerOpen:
+                    print(f"  Circuit breaker open - waiting 10 seconds...")
+                    time.sleep(10)
+                    cm_client._circuit_open_until = None
+                    cm_client._failure_count = 0
 
                 if i % 50 == 0:
                     print(f"  Processed {i}/{len(disabled_members)} disabled members...")

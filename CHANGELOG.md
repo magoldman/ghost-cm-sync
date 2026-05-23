@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/cleanup_backfill_damage.py` — one-off two-phase cleanup for the 2026-05-23 backfill: mirrors currently-Bounced CM subscribers into Ghost (`subscribed=false`), and unsubscribes CM/Ghost for users whose CM `Date` equals the backfill date but whose Ghost `created_at` predates it (wrongly reactivated).
+
+### Changed
+
+- `full_sync.py --dry-run` now calls CM's read endpoints (Step 1 `get_subscriber`, Step 2 existence check) so the dry-run summary reflects real opt-out and list-membership state. Trade-off: dry-run is slower (one CM GET per active member, one per disabled member) but accurate.
+
 ### Fixed
 
 - **Never resubscribe opted-out or bounced subscribers.** `CMSubscriberPayload.Resubscribe` was hardcoded to `True`, causing both webhook sync and `full_sync.py` to forcibly reactivate anyone with State Unsubscribed/Bounced/Deleted in Campaign Monitor. Default is now `False` and the upsert path is gated by an explicit State check (subscribers in non-Active states are skipped and logged as `skipped_cm_opt_out`). Surfaced when the 2026-05-23 backfill silently reactivated previously-unsubscribed users.
+
+### Tests
+
+- Regression tests in `tests/test_processor.py` that assert `process_member_added` and `process_member_updated` skip the upsert (and never call `add_or_update_subscriber`) when the existing CM subscriber has State `Unsubscribed`, `Bounced`, or `Deleted`.
 
 ## [0.2.0] - 2026-05-23
 
