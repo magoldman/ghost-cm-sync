@@ -199,10 +199,10 @@ def sync_member(
 
         if existing:
             # Extract current ghost_status
-            for field in existing.get("CustomFields", []):
-                if field.get("Key") == "ghost_status":
-                    if field.get("Value") != member.status:
-                        previous_status = field.get("Value")
+            for field in existing.CustomFields:
+                if field.Key == "ghost_status":
+                    if field.Value != member.status:
+                        previous_status = field.Value
                         status_changed = True
                     break
 
