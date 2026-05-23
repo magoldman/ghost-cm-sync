@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `scripts/cleanup_backfill_damage.py` — one-off two-phase cleanup for the 2026-05-23 backfill: mirrors currently-Bounced CM subscribers into Ghost (`subscribed=false`), and unsubscribes CM/Ghost for users whose CM `Date` equals the backfill date but whose Ghost `created_at` predates it (wrongly reactivated).
+- `scripts/restore_ssrf_window_members.py` — companion recovery for the above. The cleanup script's heuristic couldn't distinguish two populations: (a) genuinely wrongly-resubscribed historical opt-outs and (b) Apr 25–May 22 signups whose webhooks were blocked by the SSRF bug and only landed in CM via today's backfill. This script restores the in-window cohort by force-adding them with `Resubscribe=True` and setting Ghost `subscribed=true`. Intentionally bypasses the new State-check guard for this one-off recovery.
 
 ### Changed
 
