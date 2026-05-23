@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ghost-cm-sync"
-version = "0.1.0"
+version = "0.2.0"
 description = "Webhook-based integration that synchronizes Ghost membership data to Campaign Monitor"
 readme = "README.md"
 license = "MIT"
