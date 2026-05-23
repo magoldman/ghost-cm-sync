@@ -1,4 +1,0 @@
-# /etc/cron.d/ghost-cm-sync-activity-sentinel
-# Poll /metrics every 15 min and ping Healthchecks.io on activity.
-# See deploy/activity-sentinel.py for behavior.
-*/15 * * * * root /usr/local/bin/activity-sentinel.py
