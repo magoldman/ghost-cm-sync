@@ -1,6 +1,7 @@
 [Unit]
 Description=Ghost to Campaign Monitor Sync Worker
 After=network.target redis.service ghost-cm-sync.service
+OnFailure=alert-failure@%n.service
 
 [Service]
 Type=simple

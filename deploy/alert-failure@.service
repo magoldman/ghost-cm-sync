@@ -1,0 +1,7 @@
+[Unit]
+Description=Slack alert for failed unit %i
+# Intentionally no OnFailure= here — never alert about the alerter itself (loop prevention)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/slack-alert-failure.sh %i
