@@ -46,6 +46,20 @@ class CampaignMonitorError(Exception):
         super().__init__(message)
 
 
+class CMSubscriberSuppressedError(Exception):
+    """Raised when CM refuses upsert because the email is on the account suppression list.
+
+    Terminal condition — retrying won't help. Callers should treat it as a skip
+    (similar to the opt-out State check) rather than a transient failure.
+    Intentionally does NOT inherit from CampaignMonitorError so callers can
+    catch it with a distinct except clause.
+    """
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
 class CampaignMonitorClient:
     """Campaign Monitor API client with connection pooling and circuit breaker."""
 
@@ -279,8 +293,18 @@ class CampaignMonitorClient:
                 )
                 return {"success": True, "email": member.email, "name": sanitized_name}
             else:
-                self._record_failure()
                 _, error_msg = self._parse_error_response(response)
+                # CM rejects upserts for emails on the account-wide suppression list.
+                # Don't trip the circuit breaker — this isn't an API health issue,
+                # just a per-email terminal state.
+                if "suppression list" in error_msg.lower():
+                    logger.info(
+                        "subscriber_suppressed",
+                        site_id=self.site_id,
+                        email_hash=hash_email(member.email),
+                    )
+                    raise CMSubscriberSuppressedError(error_msg)
+                self._record_failure()
                 raise CampaignMonitorError(
                     f"Failed to upsert subscriber: {error_msg}",
                     status_code=response.status_code,

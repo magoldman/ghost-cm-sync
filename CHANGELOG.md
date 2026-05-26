@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Never resubscribe opted-out or bounced subscribers.** `CMSubscriberPayload.Resubscribe` was hardcoded to `True`, causing both webhook sync and `full_sync.py` to forcibly reactivate anyone with State Unsubscribed/Bounced/Deleted in Campaign Monitor. Default is now `False` and the upsert path is gated by an explicit State check (subscribers in non-Active states are skipped and logged as `skipped_cm_opt_out`). Surfaced when the 2026-05-23 backfill silently reactivated previously-unsubscribed users.
+- **CM account-wide suppression list now treated as terminal, not transient.** When CM returns "Email Address exists in suppression list. Subscriber is not added." (an account-wide block, distinct from per-list opt-out State), the upsert path raises `CMSubscriberSuppressedError` and callers (`src/processor.py`, `scripts/full_sync.py`) treat it as a skip (`skipped_cm_suppressed`) rather than a retryable failure. Previously RQ would retry indefinitely until max_retries, spamming the failed registry. Circuit breaker is also bypassed for this error since suppression is a per-email state, not an API health signal. Regression-tested in `tests/test_processor.py`.
 
 ### Tests
 

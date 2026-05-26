@@ -4,7 +4,12 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from src.campaign_monitor import CampaignMonitorError, CircuitBreakerOpen, get_cm_client
+from src.campaign_monitor import (
+    CampaignMonitorError,
+    CircuitBreakerOpen,
+    CMSubscriberSuppressedError,
+    get_cm_client,
+)
 from src.logging_config import get_logger, hash_email
 from src.models import CMSubscriberResponse, GhostWebhookPayload, SyncResult
 
@@ -100,6 +105,21 @@ def process_member_added(payload: GhostWebhookPayload, site_id: str) -> SyncResu
             new_status=member.status,
         )
 
+    except CMSubscriberSuppressedError as e:
+        logger.info(
+            "skipped_cm_suppressed",
+            site_id=site_id,
+            email_hash=hash_email(member.email),
+            event_type="member.added",
+        )
+        return SyncResult(
+            success=True,
+            email=member.email,
+            event_type="member.added",
+            message=f"Skipped: CM suppression list ({e.message})",
+            latency_ms=(time.time() - start_time) * 1000,
+        )
+
     except (CampaignMonitorError, CircuitBreakerOpen) as e:
         latency_ms = (time.time() - start_time) * 1000
         logger.error(
@@ -184,6 +204,21 @@ def process_member_updated(payload: GhostWebhookPayload, site_id: str) -> SyncRe
             status_changed=status_changed,
             previous_status=previous_status,
             new_status=member.status,
+        )
+
+    except CMSubscriberSuppressedError as e:
+        logger.info(
+            "skipped_cm_suppressed",
+            site_id=site_id,
+            email_hash=hash_email(member.email),
+            event_type="member.updated",
+        )
+        return SyncResult(
+            success=True,
+            email=member.email,
+            event_type="member.updated",
+            message=f"Skipped: CM suppression list ({e.message})",
+            latency_ms=(time.time() - start_time) * 1000,
         )
 
     except (CampaignMonitorError, CircuitBreakerOpen) as e:

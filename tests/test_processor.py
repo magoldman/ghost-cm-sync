@@ -12,6 +12,7 @@ os.environ["SITE1_NAME"] = "testsite"
 os.environ["SITE1_GHOST_WEBHOOK_SECRET"] = "test-secret-key"
 os.environ["SITE1_CM_LIST_ID"] = "test-list-id"
 
+from src.campaign_monitor import CMSubscriberSuppressedError
 from src.models import CMSubscriberCustomField, CMSubscriberResponse
 from src.processor import detect_status_change, process_event
 
@@ -205,3 +206,34 @@ class TestProcessEvent:
         assert "Skipped" in result.message
         assert opt_out_state in result.message
         mock_client.add_or_update_subscriber.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "event_type, payload_fixture",
+        [
+            ("member.added", "sample_ghost_payload"),
+            ("member.updated", "sample_ghost_update_payload"),
+        ],
+    )
+    @patch("src.processor.get_cm_client")
+    def test_process_member_skips_on_cm_suppression(
+        self,
+        mock_get_client: MagicMock,
+        event_type: str,
+        payload_fixture: str,
+        request: Any,
+    ) -> None:
+        """CM suppression-list errors must be terminal — return success=True so RQ
+        doesn't retry infinitely. Regression guard for 2026-05-26."""
+        payload = request.getfixturevalue(payload_fixture)
+        mock_client = MagicMock()
+        mock_client.get_subscriber.return_value = None  # not on list yet
+        mock_client.add_or_update_subscriber.side_effect = CMSubscriberSuppressedError(
+            "Email Address exists in suppression list. Subscriber is not added."
+        )
+        mock_get_client.return_value = mock_client
+
+        result = process_event(event_type, payload, "testsite")
+
+        assert result.success is True, "suppression must not flag as failed (would retry forever)"
+        assert "suppression" in result.message.lower()
+        assert result.event_type == event_type

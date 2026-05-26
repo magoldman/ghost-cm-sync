@@ -29,7 +29,12 @@ load_dotenv(project_root / ".env")
 import httpx
 import jwt
 
-from src.campaign_monitor import CampaignMonitorClient, CampaignMonitorError, CircuitBreakerOpen
+from src.campaign_monitor import (
+    CampaignMonitorClient,
+    CampaignMonitorError,
+    CircuitBreakerOpen,
+    CMSubscriberSuppressedError,
+)
 from src.config import get_settings, get_site_config, get_site_ids
 from src.logging_config import configure_logging, get_logger, hash_email
 from src.models import GhostLabel, GhostMemberData
@@ -235,6 +240,15 @@ def sync_member(
             "previous_status": previous_status,
         }
 
+    except CMSubscriberSuppressedError as e:
+        return {
+            "email": member.email,
+            "name": member.name,
+            "status": member.status,
+            "action": "skipped_cm_suppressed",
+            "error": str(e),
+        }
+
     except CampaignMonitorError as e:
         return {
             "email": member.email,
@@ -390,6 +404,7 @@ def main() -> int:
             "unsubscribed": 0,
             "skipped_not_in_list": 0,
             "skipped_cm_opt_out": 0,
+            "skipped_cm_suppressed": 0,
         }
 
         # Step 1: Sync active members (add or update)
@@ -412,6 +427,11 @@ def main() -> int:
                 if args.verbose:
                     name_display = member.name or ""
                     print(f"  ⊘ {member.email} | {name_display} | CM state: {result.get('cm_state')}")
+            elif result["action"] == "skipped_cm_suppressed":
+                results["skipped_cm_suppressed"] += 1
+                if args.verbose:
+                    name_display = member.name or ""
+                    print(f"  ⊘ {member.email} | {name_display} | CM suppression list")
             else:
                 results["failed"] += 1
                 print(f"  ✗ Failed: {member.email} - {result.get('error')}")
@@ -469,6 +489,7 @@ def main() -> int:
         print(f"  Synced: {results['synced']}")
         print(f"  Failed: {results['failed']}")
         print(f"  Skipped (CM opt-out preserved): {results['skipped_cm_opt_out']}")
+        print(f"  Skipped (CM suppression list):  {results['skipped_cm_suppressed']}")
         print(f"  Status changes detected: {results['status_changes']}")
         print()
         print("Disabled members:")
