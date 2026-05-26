@@ -402,6 +402,21 @@ Common issues:
 2. Check custom fields exist in Campaign Monitor
 3. Verify API key has correct permissions
 
+#### Specific user not syncing to CM
+
+Search the worker journal for the user's email hash:
+
+```bash
+HASH=$(python3 -c "import hashlib; print(hashlib.sha256('USER@EXAMPLE.COM'.lower().encode()).hexdigest()[:12])")
+sudo journalctl -u ghost-cm-worker --no-pager | grep "$HASH" | tail -10
+```
+
+Look for the structured event:
+
+- `skipped_cm_opt_out` → the user is `Unsubscribed`/`Bounced`/`Deleted` in CM (per-list state). Working as designed; don't reactivate.
+- `skipped_cm_suppressed` → the user is on CM's **account-wide suppression list** (cross-list block, distinct from per-list State). Worker silently skips after one attempt rather than retrying. Common causes: spam complaint, manual admin suppression, hard-bounce escalation, or user-requested suppression. Verify in CM Admin → Account → Manage Settings → Suppression List. Decisions to unsuppress should reflect whether the user actually wants email.
+- `process_member_*_failed` → genuine CM API failure. Check the error message.
+
 ### Redis connection issues
 
 ```bash
